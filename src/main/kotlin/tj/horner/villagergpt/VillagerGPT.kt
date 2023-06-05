@@ -20,7 +20,7 @@ class VillagerGPT : SuspendingJavaPlugin() {
     val messagePipeline = MessageProcessorPipeline(
         OpenAIMessageProducer(config),
         listOf(
-            ActionProcessor(),
+            ActionProcessor(this),
             TradeOfferProcessor(logger)
         )
     )

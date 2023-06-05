@@ -27,7 +27,23 @@ enum class VillagerPersonality {
     },
     EMPATH {
         override fun promptDescription(): String =
-            "You are a kind person and very empathetic to others' situations"
+                "You are a kind person and very empathetic to others' situations"
+    },
+    INCONVENIENT {
+        override fun promptDescription(): String =
+                "You like to be extremely difficult to work with and will make things as inconvenient as possible for players"
+    },
+    FLIRT {
+        override fun promptDescription(): String =
+                "You are a flirtatious person and enjoy flirting with players"
+    },
+    SENSITIVE {
+        override fun promptDescription(): String =
+                "You are easily offended and will refuse to trade with a player if they say something you don't like"
+    },
+    SASSY {
+        override fun promptDescription(): String =
+                "You are a sassy person and enjoy being sarcastic"
     };
 
     abstract fun promptDescription(): String
