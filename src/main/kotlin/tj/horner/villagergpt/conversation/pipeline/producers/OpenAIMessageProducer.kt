@@ -4,6 +4,7 @@ import com.aallam.openai.api.BetaOpenAI
 import com.aallam.openai.api.chat.ChatCompletionRequest
 import com.aallam.openai.api.logging.LogLevel
 import com.aallam.openai.api.model.ModelId
+import com.aallam.openai.client.LoggingConfig
 import com.aallam.openai.client.OpenAI
 import com.aallam.openai.client.OpenAIConfig
 import org.bukkit.configuration.Configuration
@@ -14,7 +15,9 @@ class OpenAIMessageProducer(config: Configuration) : ConversationMessageProducer
     private val openAI = OpenAI(
         OpenAIConfig(
             config.getString("openai-key")!!,
-            LogLevel.None
+            LoggingConfig(
+                LogLevel.None
+            )
         )
     )
 
@@ -30,6 +33,6 @@ class OpenAIMessageProducer(config: Configuration) : ConversationMessageProducer
         )
 
         val completion = openAI.chatCompletion(request)
-        return completion.choices[0].message!!.content
+        return completion.choices[0].message!!.content!!
     }
 }
