@@ -1,6 +1,8 @@
 package tj.horner.villagergpt.handlers
 
 import com.aallam.openai.api.BetaOpenAI
+import com.aallam.openai.api.chat.ChatMessage
+import com.aallam.openai.api.chat.ChatRole
 import com.github.shynixn.mccoroutine.bukkit.minecraftDispatcher
 import io.papermc.paper.event.player.AsyncChatEvent
 import kotlinx.coroutines.withContext
@@ -8,6 +10,7 @@ import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
 import net.kyori.adventure.text.format.TextDecoration
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
+import org.bukkit.Bukkit
 import org.bukkit.entity.Villager
 import org.bukkit.event.EventHandler
 import org.bukkit.event.Listener
@@ -16,6 +19,7 @@ import org.bukkit.event.player.PlayerInteractEntityEvent
 import tj.horner.villagergpt.MetadataKey
 import tj.horner.villagergpt.VillagerGPT
 import tj.horner.villagergpt.chat.ChatMessageTemplate
+import tj.horner.villagergpt.conversation.VillagerGlobalConversation
 import tj.horner.villagergpt.conversation.formatting.MessageFormatter
 import tj.horner.villagergpt.events.VillagerConversationEndEvent
 import tj.horner.villagergpt.events.VillagerConversationMessageEvent
@@ -88,46 +92,84 @@ class ConversationEventsHandler(private val plugin: VillagerGPT) : Listener {
 
     @EventHandler
     suspend fun onSendMessage(evt: AsyncChatEvent) {
-        val conversation = plugin.conversationManager.getConversation(evt.player) ?: return
-        evt.isCancelled = true
+        val conversation = plugin.conversationManager.getConversation(evt.player)
+        // Check if conversation is an instace of VillagerGlobalConversation
+        if (conversation != null) {
+            evt.isCancelled = true
 
-        if (conversation.pendingResponse) {
-            val message = Component.text("Please wait for ")
-                .append(conversation.villager.name().color(NamedTextColor.AQUA))
-                .append(Component.text(" to respond"))
-                .decorate(TextDecoration.ITALIC)
+            if (conversation.pendingResponse) {
+                val message = Component.text("Please wait for ")
+                    .append(conversation.villager.name().color(NamedTextColor.AQUA))
+                    .append(Component.text(" to respond"))
+                    .decorate(TextDecoration.ITALIC)
 
-            evt.player.sendMessage(ChatMessageTemplate.withPluginNamePrefix(message))
-            return
-        }
-
-        conversation.pendingResponse = true
-        val villager = conversation.villager
-
-        try {
-            val pipeline = plugin.messagePipeline
-
-            val playerMessage = PlainTextComponentSerializer.plainText().serialize(evt.originalMessage())
-            val formattedPlayerMessage = MessageFormatter.formatMessageFromPlayer(Component.text(playerMessage), villager)
-
-            evt.player.sendMessage(formattedPlayerMessage)
-
-            val actions = pipeline.run(playerMessage, conversation)
-            if (!conversation.ended) {
-                withContext(plugin.minecraftDispatcher) {
-                    actions.forEach { it.run() }
-                }
+                evt.player.sendMessage(ChatMessageTemplate.withPluginNamePrefix(message))
+                return
             }
-        } catch(e: Exception) {
-            val message = Component.text("Something went wrong while getting ")
-                .append(villager.name().color(NamedTextColor.AQUA))
-                .append(Component.text("'s response. Please try again"))
-                .decorate(TextDecoration.ITALIC)
 
-            evt.player.sendMessage(ChatMessageTemplate.withPluginNamePrefix(message))
-            throw(e)
-        } finally {
-            conversation.pendingResponse = false
+            conversation.pendingResponse = true
+            val villager = conversation.villager
+
+            try {
+                val pipeline = plugin.messagePipeline
+
+                val playerMessage = PlainTextComponentSerializer.plainText().serialize(evt.originalMessage())
+                val formattedPlayerMessage =
+                    MessageFormatter.formatMessageFromPlayer(Component.text(playerMessage), villager)
+
+                evt.player.sendMessage(formattedPlayerMessage)
+
+                val actions = pipeline.run(playerMessage, conversation)
+                if (!conversation.ended) {
+                    withContext(plugin.minecraftDispatcher) {
+                        actions.forEach { it.run() }
+                    }
+                }
+            } catch (e: Exception) {
+                val message = Component.text("Something went wrong while getting ")
+                    .append(villager.name().color(NamedTextColor.AQUA))
+                    .append(Component.text("'s response. Please try again"))
+                    .decorate(TextDecoration.ITALIC)
+
+                evt.player.sendMessage(ChatMessageTemplate.withPluginNamePrefix(message))
+                throw (e)
+            } finally {
+                conversation.pendingResponse = false
+            }
+        } else {
+            var globalConversation = plugin.conversationManager.getGlobalConversation()
+            val villager = globalConversation!!.self
+            try {
+                val pipeline = plugin.messagePipeline
+
+                val playerMessage = PlainTextComponentSerializer.plainText().serialize(evt.originalMessage())
+                val formattedPlayerMessage =
+                    MessageFormatter.formatMessageFromPlayer(Component.text(playerMessage), villager)
+
+                //evt.player.sendMessage(formattedPlayerMessage)
+                val chat =
+                """{
+                "message": $playerMessage,
+                "playerInfo": {
+                    "name": ${evt.player},
+                    "itemInHand": ${evt.player.inventory.itemInMainHand.type.name},
+                    }"
+                 }"""
+                val actions = pipeline.run(chat, globalConversation)
+                if (!globalConversation.ended) {
+                    withContext(plugin.minecraftDispatcher) {
+                        actions.forEach { it.run() }
+                    }
+                }
+            } catch (e: Exception) {
+                val message = Component.text("Something went wrong while getting ")
+                    .append(villager.name().color(NamedTextColor.AQUA))
+                    .append(Component.text("'s response. Please try again"))
+                    .decorate(TextDecoration.ITALIC)
+
+                Bukkit.broadcast(ChatMessageTemplate.withPluginNamePrefix(message))
+                throw (e)
+            }
         }
     }
 

@@ -4,6 +4,7 @@ import com.aallam.openai.api.BetaOpenAI
 import com.aallam.openai.api.chat.ChatMessage
 import com.aallam.openai.api.chat.ChatRole
 import tj.horner.villagergpt.conversation.VillagerConversation
+import tj.horner.villagergpt.conversation.VillagerGlobalConversation
 
 /**
  * A pipeline for producing and processing messages for a VillagerConversation.
@@ -22,36 +23,37 @@ class MessageProcessorPipeline(
 ) {
     @OptIn(BetaOpenAI::class)
     suspend fun run(playerMessage: String, conversation: VillagerConversation): Iterable<ConversationMessageAction> {
-        conversation.addMessage(ChatMessage(
+        var convo = conversation
+
+        convo.addMessage(ChatMessage(
             role = ChatRole.User,
             content = playerMessage
         ))
 
         val nextMessage: String
         try {
-            nextMessage = producer.produceNextMessage(conversation)
+            nextMessage = producer.produceNextMessage(convo)
         } catch(e: Exception) {
-            conversation.removeLastMessage()
+            convo.removeLastMessage()
             throw(e)
         }
 
         val actions = mutableListOf<ConversationMessageAction>()
         var transformedMessage = nextMessage
         processors.forEach {
-            val resultActions = it.processMessage(transformedMessage, conversation)
+            val resultActions = it.processMessage(transformedMessage, convo)
             if (resultActions != null) actions.addAll(resultActions)
 
             if (it is ConversationMessageTransformer) {
                 val transformer = it as ConversationMessageTransformer
-                transformedMessage = transformer.transformMessage(transformedMessage, conversation)
+                transformedMessage = transformer.transformMessage(transformedMessage, convo)
             }
         }
 
-        conversation.addMessage(ChatMessage(
+        convo.addMessage(ChatMessage(
             role = ChatRole.Assistant,
             content = nextMessage
         ))
-
         return actions
     }
 }
