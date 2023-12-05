@@ -17,10 +17,17 @@ repositories {
         name = "sonatype"
         url = "https://oss.sonatype.org/content/groups/public/"
     }
+    maven {
+        name = 'citizens-repo'
+        url = 'https://maven.citizensnpcs.co/repo'
+    }
 }
 
 dependencies {
     compileOnly "io.papermc.paper:paper-api:1.19-R0.1-SNAPSHOT"
+    compileOnly('net.citizensnpcs:citizens-main:2.0.30-SNAPSHOT') {
+        exclude group: '*', module: '*'
+    }
     implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8"
 
     implementation "com.github.shynixn.mccoroutine:mccoroutine-bukkit-api:2.11.0"

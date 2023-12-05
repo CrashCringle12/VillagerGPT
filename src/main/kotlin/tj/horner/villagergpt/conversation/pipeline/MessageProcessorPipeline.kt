@@ -3,8 +3,7 @@ package tj.horner.villagergpt.conversation.pipeline
 import com.aallam.openai.api.BetaOpenAI
 import com.aallam.openai.api.chat.ChatMessage
 import com.aallam.openai.api.chat.ChatRole
-import tj.horner.villagergpt.conversation.VillagerConversation
-import tj.horner.villagergpt.conversation.VillagerGlobalConversation
+import tj.horner.villagergpt.conversation.NPCConversation
 
 /**
  * A pipeline for producing and processing messages for a VillagerConversation.
@@ -22,7 +21,7 @@ class MessageProcessorPipeline(
     private val processors: List<ConversationMessageProcessor>
 ) {
     @OptIn(BetaOpenAI::class)
-    suspend fun run(playerMessage: String, conversation: VillagerConversation): Iterable<ConversationMessageAction> {
+    suspend fun run(playerMessage: String, conversation: NPCConversation): Iterable<ConversationMessageAction> {
         var convo = conversation
 
         convo.addMessage(ChatMessage(

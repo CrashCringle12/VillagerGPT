@@ -1,7 +1,7 @@
 package tj.horner.villagergpt.conversation.pipeline
 
-import tj.horner.villagergpt.conversation.VillagerConversation
+import tj.horner.villagergpt.conversation.NPCConversation
 
 interface ConversationMessageTransformer {
-    fun transformMessage(message: String, conversation: VillagerConversation): String
+    fun transformMessage(message: String, conversation: NPCConversation): String
 }

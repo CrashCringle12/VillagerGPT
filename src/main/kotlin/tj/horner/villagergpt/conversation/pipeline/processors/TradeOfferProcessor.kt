@@ -9,9 +9,7 @@ import org.bukkit.Bukkit
 import org.bukkit.Material
 import org.bukkit.inventory.ItemStack
 import org.bukkit.inventory.MerchantRecipe
-import org.bukkit.plugin.Plugin
-import org.bukkit.plugin.java.JavaPlugin
-import tj.horner.villagergpt.conversation.VillagerConversation
+import tj.horner.villagergpt.conversation.NPCConversation
 import tj.horner.villagergpt.conversation.formatting.MessageFormatter
 import tj.horner.villagergpt.conversation.pipeline.ConversationMessageAction
 import tj.horner.villagergpt.conversation.pipeline.ConversationMessageProcessor
@@ -24,7 +22,7 @@ class TradeOfferProcessor(private val logger: Logger) : ConversationMessageProce
     private val gson = Gson()
     private val itemFactory = Bukkit.getServer().itemFactory
 
-    override fun processMessage(message: String, conversation: VillagerConversation): Collection<ConversationMessageAction> {
+    override fun processMessage(message: String, conversation: NPCConversation): Collection<ConversationMessageAction> {
         val tradeExpressionRegex = Regex("TRADE(\\[.+?\\])ENDTRADE")
         val splitMessage = splitWithMatches(message, tradeExpressionRegex)
 
@@ -51,10 +49,10 @@ class TradeOfferProcessor(private val logger: Logger) : ConversationMessageProce
             }
         }
 
-        val formattedMessage = MessageFormatter.formatMessageFromVillager(messageComponent.build(), conversation.villager)
+        val formattedMessage = MessageFormatter.formatMessageFromNPC(messageComponent.build(), conversation.npc)
 
         return listOf(
-            SetTradesAction(conversation.villager, trades),
+            //SetTradesAction(conversation.npc, trades),
             SendPlayerMessageAction(conversation.player, formattedMessage)
         )
     }

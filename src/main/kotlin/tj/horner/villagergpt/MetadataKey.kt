@@ -1,5 +1,5 @@
 package tj.horner.villagergpt
 
 object MetadataKey {
-    const val SelectingVillager = "villagergpt:selecting_villager"
+    const val SelectingNpc = "villagergpt:selecting_villager"
 }

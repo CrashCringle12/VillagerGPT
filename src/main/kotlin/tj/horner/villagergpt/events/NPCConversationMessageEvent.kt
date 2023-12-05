@@ -4,10 +4,10 @@ import com.aallam.openai.api.BetaOpenAI
 import com.aallam.openai.api.chat.ChatMessage
 import org.bukkit.event.Event
 import org.bukkit.event.HandlerList
-import tj.horner.villagergpt.conversation.VillagerConversation
+import tj.horner.villagergpt.conversation.NPCConversation
 
 @OptIn(BetaOpenAI::class)
-class VillagerConversationMessageEvent(val conversation: VillagerConversation, val message: ChatMessage) : Event(true) {
+class NPCConversationMessageEvent(val conversation: NPCConversation, val message: ChatMessage) : Event(true) {
     companion object {
         private val handlers = HandlerList()
 
@@ -17,6 +17,6 @@ class VillagerConversationMessageEvent(val conversation: VillagerConversation, v
     }
 
     override fun getHandlers(): HandlerList {
-        return VillagerConversationMessageEvent.handlers
+        return NPCConversationMessageEvent.handlers
     }
 }

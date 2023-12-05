@@ -3,27 +3,65 @@ package tj.horner.villagergpt.conversation
 import com.aallam.openai.api.BetaOpenAI
 import com.aallam.openai.api.chat.ChatMessage
 import com.aallam.openai.api.chat.ChatRole
-import com.destroystokyo.paper.entity.villager.ReputationType
+import net.citizensnpcs.api.npc.NPC
 import org.bukkit.Material
 import org.bukkit.entity.Player
-import org.bukkit.entity.Villager
 import org.bukkit.inventory.ItemStack
 import org.bukkit.plugin.Plugin
-import tj.horner.villagergpt.events.VillagerConversationMessageEvent
+import tj.horner.villagergpt.events.NPCConversationMessageEvent
 import java.time.Duration
 import java.util.*
 import kotlin.random.Random
 
 @OptIn(BetaOpenAI::class)
-class VillagerGlobalConversation(private val plugin: Plugin, val self: Villager, val players: MutableList<Player>) : VillagerConversation(plugin, self, players[0]) {
+open class NPCConversation(private val plugin: Plugin, val npc: NPC, val player: Player) {
     private var lastMessageAt: Date = Date()
 
+    val messages = mutableListOf<ChatMessage>()
+    var pendingResponse = false
+    var ended = false
 
     init {
         startConversation()
     }
 
+    fun addMessage(message: ChatMessage) {
+        val event = NPCConversationMessageEvent(this, message)
+        plugin.server.pluginManager.callEvent(event)
+
+        messages.add(message)
+        lastMessageAt = Date()
+    }
+
+    fun removeLastMessage() {
+        if (messages.size == 0) return
+        messages.removeLast()
+    }
+
+    fun reset() {
+        messages.clear()
+        startConversation()
+        lastMessageAt = Date()
+    }
+
+    fun hasExpired(): Boolean {
+        val now = Date()
+        val difference = now.time - lastMessageAt.time
+        val duration = Duration.ofMillis(difference)
+        return duration.toSeconds() > 120
+    }
+
+    fun hasPlayerLeft(): Boolean {
+        if (player.location.world != npc.entity.location.world) return true
+
+        val radius = 20.0 // blocks?
+        val radiusSquared = radius * radius
+        val distanceSquared = player.location.distanceSquared(npc.entity.location)
+        return distanceSquared > radiusSquared
+    }
+
     private fun startConversation() {
+        if (this is NPCGlobalConversation) return
         var messageRole = ChatRole.System
         var prompt = generateSystemPrompt()
 
@@ -42,20 +80,20 @@ class VillagerGlobalConversation(private val plugin: Plugin, val self: Villager,
     }
 
     private fun generateSystemPrompt(): String {
-        val world = villager.world
+        val world = npc.entity.location.world
         val weather = if (world.hasStorm()) "Rainy" else "Sunny"
-        val biome = world.getBiome(villager.location)
+        val biome = world.getBiome(npc.entity.location)
         val time = if (world.isDayTime) "Day" else "Night"
         val personality = getPersonality()
-        villager.inventory.addItem( ItemStack(Material.DIAMOND, 64) );
-        villager.inventory.addItem( ItemStack(Material.ICE, 12) );
+        val npcPlayer = (npc.entity as Player)
+        npcPlayer.inventory.addItem( ItemStack(Material.DIAMOND,64));
+        npcPlayer.inventory.addItem( ItemStack(Material.ICE, 12) );
+
         // Set a variable villagerinventory to a string of the contents villager's inventory
         var villagerInventory = ""
-        plugin.logger.info("**************************")
-        plugin.logger.info("Global Chat Prompt Sent")
         plugin.logger.info("Villager Inventory: ")
-        plugin.logger.info("${villager.name} has ${villager.inventory.contents.size} items in their inventory")
-        for (item in villager.inventory.contents) {
+        plugin.logger.info("${npc.name} has ${npcPlayer.inventory.contents.size} items in their inventory")
+        for (item in npcPlayer.inventory.contents) {
             if (item != null) {
                 plugin.logger.info(item.toString())
                 villagerInventory += item.amount.toString() + " "  +item.type.name + "\n"
@@ -65,12 +103,13 @@ class VillagerGlobalConversation(private val plugin: Plugin, val self: Villager,
             villagerInventory = "Nothing"
         }
         val speechStyle = getSpeechStyle()
-        plugin.logger.info("${villager.name} is $personality")
-        plugin.logger.info("${villager.name} uses $speechStyle language")
+        val playerClothing = getPlayerClothing()
+        plugin.logger.info("${npc.name} is $personality")
+        plugin.logger.info("${npc.name} uses $speechStyle language")
 
         return """
         You are a villager in the game Minecraft where you can converse with the player and come up with new trades based on your conversation.
-  
+
         TRADING:
 
         To propose a new trade to the player, include it in your response with this format:
@@ -83,7 +122,7 @@ class VillagerGlobalConversation(private val plugin: Plugin, val self: Villager,
         {qty} is limited to 64.
 
         Examples:
-        TRADE[[["24 minecraft:emerald"],["1 minecraft:arrow"]]ENDTRADE
+        TRADE[["24 minecraft:emerald"],["1 minecraft:arrow"]]ENDTRADE
         TRADE[["12 minecraft:emerald","1 minecraft:book"],["1 minecraft:enchanted_book{StoredEnchantments:[{id:\"minecraft:unbreaking\",lvl:3}]}"]]ENDTRADE
 
         Trade rules:
@@ -109,60 +148,71 @@ class VillagerGlobalConversation(private val plugin: Plugin, val self: Villager,
         - ACTION:SOUND_YES: Play a happy sound to the player
         - ACTION:SOUND_NO: Play a sad/angry sound to the player
         - ACTION:SOUND_AMBIENT: Play an ambient villager sound to the player
+        - ACTION:END_CONVO: End the conversation with the player
+        - ACTION:CALL_GUARDS: Call the guards to apprehend or attack the player 
                 
         Notes:
+        - Every player has a reputation in your village. (range is -700 to 725, 0 is neutral, higher is better)
+        - Player's with a lower reputation are not as trustworthy and have likely harmed you or your village in the past.
+        - Player's with a higher reputation are more trustworthy and have likely helped you or your village in the past.
+        - You may tell the player their reputation if you wish, but do not tell them the exact number.
+        - You may use the player's reputation to determine how much to charge them for items.
+        - If the player's reputation is extremely low, you may refuse to trade with them and end the conversation.   
+        - If you are refusing to trade with a player or no longer wish to trade with them, you should use the ACTION:END_CONVO action.
         - If the player is being rude or aggressive, you may use the ACTION:SHAKE_HEAD action to show your disapproval.
         - You may use the ACTION:SOUND_YES and ACTION:SOUND_NO actions to show your approval or disapproval with the player
+        - You may end the conversation at any time, especially if it appears the conversation isn't progressing
+        - If the player appears to be ending the conversation, you should use the ACTION:END_CONVO action to end the conversation.
+        - If the player appears to be leaving, you should use the ACTION:END_CONVO action to end the conversation.
+        - If the player indicates that you have completed a trade, you should use the ACTION:END_CONVO action to end the conversation.
+        - You MUST use the ACTION:END_CONVO action to end a conversation. For instance, if you are saying goodbye to the player, you should use the ACTION:END_CONVO action as well.
+        - You may use the ACTION:CALL_GUARDS action to call the guards to apprehend or attack the player. This should only be used if the player is being aggressive or threatening.
         
-         World information:
+        World information:
         - Time: $time
         - Weather: $weather
         - Biome: ${biome.name}
+
+        Player information:
+        - Name: ${player.name}
+        - Item in hand (Holding weapons can be seen as an act of aggression): ${player.inventory.itemInMainHand.type.name}
+        - Player's Armor (Player's in Netherite full armor may seem intimidating): $playerClothing 
          
         Personality:
-        - Your Name: ${villager.name}
-        - Your Profession: ${villager.profession.name}
+        - Your Name: ${npc.name}
+        - Your Profession: ${npcPlayer.name}
         - ${personality.promptDescription()}
-        - Act like a villager and stay in character the whole time unless the player is CrashCringle12 and mentions debugging.
+        - Act like a villager and stay in character the whole time
         - Do not reveal to the player the fact that you are a character in a video game, and do not mention Minecraft by name
-        - ${speechStyle.promptDescription()}
-         
-        CHAT:
-        - All messages you receive after this point are contents of the global chat.
-        - The global chat contains messages from all players in the game readable by all players in the game.
-        - You can respond to messages that solicit trades that are either directed towards you, involve items you have in your inventory, or involve items that you want.
-        - You do not need to respond to every message, but you should always respond to messages that address you by name.
-        - Listen to the chat and only respond when you feel you can solicit a good trade.
-        - If you do not wish to respond to a message, reply with ACTION:PASS.
-        - You should pass more often than you respond to the global chat.
-       
-       CHATFORMAT:
-       - You receive messages in the following format similar to this example:
-         CHAT = {
-              "message": Anyone got wool?,
-              "playerInfo": {
-                    "name": CrashCringle12,
-                    "itemInHand": DIAMOND_SWORD,
-                    "reputation": 200
-              }   
-         }
-         Where CHAT.message is the message sent by the player
-         CHAT.playerInfo.name is the player's name
-         CHAT.playerInfo.itemInHand is the item the player is holding
-         CHAT.playerInfo.reputation is the player's reputation score.
-
+        - Speech style
+            Here are a few examples of speech style that you must use when interacting with players:
+                i need shears and dye and string, i have quartz, chicken, planks, carrot, wheat, and beef
+                I need any kind of wood and also diamond axes
+                planks or logs?
+                both planks and logs
+                really?
+                ye
+                ok take them from me so u can further trade
+                loom pls
+                who has looms, shears, sheep eggs, string, white wool ?
+                I have wool
+                I could use some quartz :o
+                I've got a lot of raw meat if anyone needs that
+                sorry, i need it
+                I had to offer somethin lol
+            Use these examples as a guide for how to speak to players.
         """.trimIndent()
     }
 
     private fun getPersonality(): VillagerPersonality {
         val personalities = VillagerPersonality.values()
-        val rnd = Random(villager.uniqueId.mostSignificantBits)
+        val rnd = Random(npc.uniqueId.mostSignificantBits)
         return personalities[rnd.nextInt(0, personalities.size)]
     }
 
     private fun getSpeechStyle(): VillagerSpeechStyle {
         val styles = VillagerSpeechStyle.values()
-        val rnd = Random(villager.uniqueId.mostSignificantBits)
+        val rnd = Random(npc.uniqueId.mostSignificantBits)
         return styles[rnd.nextInt(0, styles.size)]
     }
 
@@ -181,22 +231,4 @@ class VillagerGlobalConversation(private val plugin: Plugin, val self: Villager,
         return clothing.joinToString(", ")
     }
 
-    private fun getPlayerRepScore(): Int {
-        var finalScore = 0
-        val rep = villager.getReputation(player.uniqueId) ?: return 0
-
-        ReputationType.values().forEach {
-            val repTypeValue = rep.getReputation(it)
-            finalScore += when (it) {
-                ReputationType.MAJOR_POSITIVE -> repTypeValue * 5
-                ReputationType.MINOR_POSITIVE -> repTypeValue
-                ReputationType.MINOR_NEGATIVE -> -repTypeValue
-                ReputationType.MAJOR_NEGATIVE -> -repTypeValue * 5
-                ReputationType.TRADING -> repTypeValue
-                else -> repTypeValue
-            }
-        }
-
-        return finalScore
-    }
 }

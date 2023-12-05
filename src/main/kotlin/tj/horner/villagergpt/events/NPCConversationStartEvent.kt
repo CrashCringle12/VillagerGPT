@@ -2,9 +2,9 @@ package tj.horner.villagergpt.events
 
 import org.bukkit.event.Event
 import org.bukkit.event.HandlerList
-import tj.horner.villagergpt.conversation.VillagerConversation
+import tj.horner.villagergpt.conversation.NPCConversation
 
-class VillagerConversationStartEvent(val conversation: VillagerConversation) : Event() {
+class NPCConversationStartEvent(val conversation: NPCConversation) : Event() {
     companion object {
         private val handlers = HandlerList()
 
@@ -14,6 +14,6 @@ class VillagerConversationStartEvent(val conversation: VillagerConversation) : E
     }
 
     override fun getHandlers(): HandlerList {
-        return VillagerConversationStartEvent.handlers
+        return NPCConversationStartEvent.handlers
     }
 }

@@ -1,11 +1,11 @@
 package tj.horner.villagergpt.events
 
+import net.citizensnpcs.api.npc.NPC
 import org.bukkit.entity.Player
-import org.bukkit.entity.Villager
 import org.bukkit.event.Event
 import org.bukkit.event.HandlerList
 
-class VillagerConversationEndEvent(val player: Player, val villager: Villager) : Event() {
+class NPCConversationEndEvent(val player: Player, val npc: NPC) : Event() {
     companion object {
         private val handlers = HandlerList()
 
@@ -15,6 +15,6 @@ class VillagerConversationEndEvent(val player: Player, val villager: Villager) :
     }
 
     override fun getHandlers(): HandlerList {
-        return VillagerConversationEndEvent.handlers
+        return NPCConversationEndEvent.handlers
     }
 }

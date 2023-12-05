@@ -25,7 +25,7 @@ class TalkCommand(private val plugin: VillagerGPT) : SuspendingCommandExecutor {
         val conversation = plugin.conversationManager.getConversation(player)
         if (conversation != null) {
             val message = Component.text("You are already in a conversation with ")
-                .append(conversation.villager.name().color(NamedTextColor.AQUA))
+                .append(conversation.npc.entity.name().color(NamedTextColor.AQUA))
                 .decorate(TextDecoration.ITALIC)
 
             player.sendMessage(ChatMessageTemplate.withPluginNamePrefix(message))
@@ -37,7 +37,7 @@ class TalkCommand(private val plugin: VillagerGPT) : SuspendingCommandExecutor {
 
         player.sendMessage(ChatMessageTemplate.withPluginNamePrefix(message))
 
-        player.setMetadata(MetadataKey.SelectingVillager, FixedMetadataValue(plugin, true))
+        player.setMetadata(MetadataKey.SelectingNpc, FixedMetadataValue(plugin, true))
         return true
     }
 }
