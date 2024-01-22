@@ -3,12 +3,14 @@ package tj.horner.villagergpt
 import com.github.shynixn.mccoroutine.bukkit.SuspendingJavaPlugin
 import com.github.shynixn.mccoroutine.bukkit.registerSuspendingEvents
 import com.github.shynixn.mccoroutine.bukkit.setSuspendingExecutor
+import crashcringle.malmoserverplugin.MalmoServerPlugin
 import tj.horner.npcgpt.conversation.NPCConversationManager
 import tj.horner.villagergpt.commands.ClearCommand
 import tj.horner.villagergpt.commands.EndCommand
 import tj.horner.villagergpt.commands.TalkCommand
 import tj.horner.villagergpt.conversation.pipeline.MessageProcessorPipeline
 import tj.horner.villagergpt.conversation.pipeline.processors.ActionProcessor
+import tj.horner.villagergpt.conversation.pipeline.processors.TradeOfferProcessor
 import tj.horner.villagergpt.conversation.pipeline.producers.OpenAIMessageProducer
 import tj.horner.villagergpt.handlers.ConversationEventsHandler
 import tj.horner.villagergpt.tasks.EndStaleConversationsTask
@@ -16,10 +18,12 @@ import java.util.logging.Level
 
 class VillagerGPT : SuspendingJavaPlugin() {
     val conversationManager = NPCConversationManager(this)
+
     val messagePipeline = MessageProcessorPipeline(
         OpenAIMessageProducer(config),
         listOf(
             ActionProcessor(this),
+            TradeOfferProcessor(logger)
         )
     )
 
@@ -30,7 +34,6 @@ class VillagerGPT : SuspendingJavaPlugin() {
             logger.log(Level.WARNING, "VillagerGPT has not been configured correctly! Please set the `openai-key` in config.yml.")
             return
         }
-
         setCommandExecutors()
         registerEvents()
         scheduleTasks()
@@ -39,6 +42,7 @@ class VillagerGPT : SuspendingJavaPlugin() {
     override fun onDisable() {
         logger.info("Ending all conversations")
         conversationManager.endAllConversations()
+        conversationManager.endGlobalConversation()
     }
 
     private fun setCommandExecutors() {

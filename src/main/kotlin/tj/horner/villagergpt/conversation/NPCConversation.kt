@@ -61,7 +61,6 @@ open class NPCConversation(private val plugin: Plugin, val npc: NPC, val player:
     }
 
     private fun startConversation() {
-        if (this is NPCGlobalConversation) return
         var messageRole = ChatRole.System
         var prompt = generateSystemPrompt()
 

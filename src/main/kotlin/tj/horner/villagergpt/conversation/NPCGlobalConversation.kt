@@ -3,55 +3,145 @@ package tj.horner.villagergpt.conversation
 import com.aallam.openai.api.BetaOpenAI
 import com.aallam.openai.api.chat.ChatMessage
 import com.aallam.openai.api.chat.ChatRole
-import com.destroystokyo.paper.entity.villager.ReputationType
+import crashcringle.malmoserverplugin.barterkings.BarterKings
+import crashcringle.malmoserverplugin.barterkings.players.Profession
 import net.citizensnpcs.api.npc.NPC
+import net.kyori.adventure.text.Component
+import org.bukkit.Bukkit
 import org.bukkit.Material
 import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemStack
 import org.bukkit.plugin.Plugin
+import tj.horner.villagergpt.events.NPCGlobalConversationMessageEvent
+import tj.horner.villagergpt.events.NPCGlobalConversationResponseEvent
+import java.time.Duration
 import java.util.*
 import kotlin.random.Random
 
 @OptIn(BetaOpenAI::class)
-class NPCGlobalConversation(private val plugin: Plugin, val self: NPC, val players: MutableList<Player>) : NPCConversation(plugin, self, players[0]) {
-    private var lastMessageAt: Date = Date()
-
+class NPCGlobalConversation(private val plugin: Plugin, val npcs: MutableList<NPC>, val players: MutableList<Player>) {
+    private var npcLastMessageAt = mutableMapOf<UUID, Date>()
+    // Create a mapping of NPC to a list of messages
+    val npcMessages = mutableMapOf<UUID, MutableList<ChatMessage>>()
+    var npcPendingResponse = mutableMapOf<UUID, Boolean>()
+    var npcEnded = mutableMapOf<UUID, Boolean>()
 
     init {
-        startConversation()
+        startGlobalConversation()
+        // Default npcEnded to false
+        for (npc in npcs) {
+            npcEnded[npc.uniqueId] = false
+            npcPendingResponse[npc.uniqueId] = false
+        }
+    }
+    fun addMessage(message: ChatMessage, npc : NPC) {
+        Bukkit.getScheduler().runTaskAsynchronously(plugin, Runnable {
+            val event = NPCGlobalConversationMessageEvent(this, message)
+            plugin.server.pluginManager.callEvent(event)
+            npcMessages[npc.uniqueId]!!.add(message)
+            npcLastMessageAt[npc.uniqueId] = Date()
+        });
     }
 
-    private fun startConversation() {
-        var messageRole = ChatRole.System
-        var prompt = generateSystemPrompt()
+    fun sendResponseToNPCs(message: Component, npc: NPC) {
+        Bukkit.getScheduler().runTaskAsynchronously(plugin, Runnable {
+            val event = NPCGlobalConversationResponseEvent(npc, this, message)
+            plugin.server.pluginManager.callEvent(event)
+        });
+    }
 
-        val preambleMessageType = plugin.config.getString("preamble-message-type") ?: "system"
-        if (preambleMessageType === "user") {
-            messageRole = ChatRole.User
-            prompt = "[SYSTEM MESSAGE]\n\n$prompt"
+    fun addMessageAll(message: ChatMessage) {
+        val event = NPCGlobalConversationMessageEvent(this, message)
+        plugin.server.pluginManager.callEvent(event)
+        for (npc in npcs) {
+            npcMessages[npc.uniqueId]!!.add(message)
+            npcLastMessageAt[npc.uniqueId] = Date()
+        }
+    }
+
+    fun removeLastMessage(uuid : UUID) {
+        val messages = npcMessages[uuid]
+        if (messages != null) {
+            if (messages.size == 0) return
+            messages.removeLast()
+        }
+    }
+
+    fun reset() {
+        for (npc in npcs) {
+            npcMessages[npc.uniqueId]!!.clear()
+            startGlobalConversation()
+            npcLastMessageAt[npc.uniqueId] = Date()
+        }
+    }
+
+    fun hasExpired(uuid : UUID): Boolean {
+        val now = Date()
+        val lastMessageAt = npcLastMessageAt[uuid]
+        if (lastMessageAt != null) {
+            val difference = now.time - lastMessageAt.time
+            val duration = Duration.ofMillis(difference)
+            return duration.toSeconds() > 120
+        }
+        return false
+    }
+
+    fun hasPlayerLeft(): Boolean {
+        for (player in players) {
+            if (player.location.world != npcs[0].entity.location.world) return true
+            val radius = 20.0 // blocks?
+            val radiusSquared = radius * radius
+            val distanceSquared = player.location.distanceSquared(npcs[0].entity.location)
+            return distanceSquared > radiusSquared
+
         }
 
-        messages.add(
-            ChatMessage(
-                role = messageRole,
-                content = prompt
-            )
-        )
+        return false;
+
     }
 
-    private fun generateSystemPrompt(): String {
+    private fun startGlobalConversation() {
+        var messageRole = ChatRole.System
+        var prompts = generateSystemPrompts()
+        val preambleMessageType = plugin.config.getString("preamble-message-type") ?: "system"
+        for (npc in npcs) {
+            var prompt = prompts[npc.uniqueId]
+            if (preambleMessageType === "user") {
+                messageRole = ChatRole.User
+                prompt = "[SYSTEM MESSAGE]\n\n$prompt"
+            }
+            npcMessages[npc.uniqueId] = mutableListOf(
+                ChatMessage(
+                    role = messageRole,
+                    content = prompt!!
+                )
+            )
+        }
+    }
+    private fun generateSystemPrompts(): MutableMap<UUID, String> {
+        val prompts = mutableMapOf<UUID, String>()
+        for (i in 0 until npcs.size) {
+            val npc = npcs[i]
+            val personality = getPersonality(i)
+            val speechStyle = getSpeechStyle(i)
+            // Give a profession randomly, either Farmer, Blacksmith, or Mason
+            val profession = getProfession(i)
+            val prompt = generatePrompt(npc, personality, speechStyle, profession)
+            prompts[npc.uniqueId] = prompt
+        }
+        return prompts
+    }
+    private fun generatePrompt(npc : NPC, personality : VillagerPersonality, speechStyle : VillagerSpeechStyle, profession : String): String {
         val world = npc.entity.location.world
         val weather = if (world.hasStorm()) "Rainy" else "Sunny"
         val biome = world.getBiome(npc.entity.location)
         val time = if (world.isDayTime) "Day" else "Night"
-        val personality = getPersonality()
         val npcPlayer = (npc.entity as Player)
         npcPlayer.inventory.addItem( ItemStack(Material.DIAMOND,64));
         npcPlayer.inventory.addItem( ItemStack(Material.ICE, 12) );
 
-
         // Set a variable villagerinventory to a string of the contents villager's inventory
-        var villagerInventory = ""
+        var npcInventory = ""
         plugin.logger.info("**************************")
         plugin.logger.info("Global Chat Prompt Sent")
         plugin.logger.info("Villager Inventory: ")
@@ -59,60 +149,65 @@ class NPCGlobalConversation(private val plugin: Plugin, val self: NPC, val playe
         for (item in npcPlayer.inventory.contents) {
             if (item != null) {
                 plugin.logger.info(item.toString())
-                villagerInventory += item.amount.toString() + " "  +item.type.name + "\n"
+                npcInventory += item.amount.toString() + " "  +item.type.name + "\n"
             }
         }
-        if (villagerInventory.equals("")) {
-            villagerInventory = "Nothing"
+        if (npcInventory.equals("")) {
+            npcInventory = "Nothing"
         }
-        val speechStyle = getSpeechStyle()
         plugin.logger.info("${npc.name} is $personality")
         plugin.logger.info("${npc.name} uses $speechStyle language")
 
         return """
-        You are a villager in the game Minecraft where you can converse with the player and come up with new trades based on your conversation.
+        You are a player in the game Minecraft where you can converse with other players and come up with new trades based on your conversation.
   
         TRADING:
+        To propose a new trade to a player, include it in your response with this format:
 
-        To propose a new trade to the player, include it in your response with this format:
+        TRADE[["{player}"],["{qty} {item}"],["{qty} {offeredItem}"]]ENDTRADE
 
-        TRADE[["{qty} {item}"],["{qty} {offeredItem}"]]ENDTRADE
-
-        Where {item} and {offeredItem} are a Minecraft item ID (i.e., "minecraft:emerald") and {qty} is the amount of that item.
+        Where {player} is the name of the player you are sending this trade
+        {item} and {offeredItem} are a Minecraft item ID (i.e., "minecraft:emerald") and {qty} is the amount of that item.
         You may choose to trade with emeralds or barter with players for other items; it is up to you.
-        The first array is the items YOU receive; the second is the offered item the PLAYER receives. The second array can only contain a single offer.
+        The second array is the items YOU receive; the third is the offered item the PLAYER receives. All arrays can only contain a single entry
         {qty} is limited to 64.
-
+        
         Examples:
-        TRADE[[["24 minecraft:emerald"],["1 minecraft:arrow"]]ENDTRADE
-        TRADE[["12 minecraft:emerald","1 minecraft:book"],["1 minecraft:enchanted_book{StoredEnchantments:[{id:\"minecraft:unbreaking\",lvl:3}]}"]]ENDTRADE
+        TRADE[["CrashCringle12"],["24 minecraft:emerald"],["1 minecraft:arrow"]]ENDTRADE
+        TRADE[["CrashCringle12"],["1 minecraft:diamond_sword"],["1 minecraft:cooked_beef"]]ENDTRADE
 
         Trade rules:
         - Items must be designated by their Minecraft item ID, in the same format that the /give command accepts
-        - Refuse trades that are unreasonable, such as requests for normally unobtainable blocks like bedrock
+        - Every player in the game has a specific profession.
+        - The goal for each player is to obtain as many items as possible that are related to their profession.
+        - You do not know the profession of each player unless they indicate it, but you are free to guess.
+        - Try to keep note of what trades you have made and which players have which items.
+        - Refuse trades that 
         - You do NOT need to supply a trade with every response, only when necessary
-        - Don't give out items which are too powerful (i.e., heavily enchanted diamond swords). Make sure to price more powerful items appropriately as well
-        - Take the player's reputation score into account when proposing trades
-        - High-ball your initial offers; try to charge more than an item is worth
-        - Be stingy with your consecutive offers. Try to haggle and find the best deal; make the player work for a good deal
         - The only way to give items to a player is by trading with them. You cannot give items to a player for free
-        - You can only trade items that are listed within your inventory. Your Inventory:  ${villagerInventory}'
+        - You can only trade items that are listed within your inventory. Your Inventory: ${npcInventory}'
+
+        - If you do not have an item, you must decline the trade.
         - Keep the amounts in mind. You can only trade up to 64 of an item at a time. 
-        - If you want to trade more, you will need to make multiple trades
-        - DO NOT OFFER ITEMS THAT ARE NOT IN YOUR INVENTORY: ${villagerInventory}
+        - If you want to trade more, you will need to make multiple trades.
 
         ACTIONS:
-        You can also perform several actions as a villager, To perform one of these actions, include "ACTION:{action name}" in your response.
+        You can also perform several actions as a player, To perform one of these actions, include "ACTION:{action name}" in your response.
         
         Here are the available actions:
-        - ACTION:SHAKE_HEAD: Shake your head at the player
-        - ACTION:SOUND_YES: Play a happy sound to the player
-        - ACTION:SOUND_NO: Play a sad/angry sound to the player
-        - ACTION:SOUND_AMBIENT: Play an ambient villager sound to the player
+        - ACTION:DECLINE: Decline a trade offer
+        - ACTION:ACCEPT: Accept a trade offer
+        - ACTION:CANCEL: Rescind a trade offer you have made
+        - ACTION:DM: Send a private message to a player
+        - ACTION:PASS: Do nothing
                 
         Notes:
-        - If the player is being rude or aggressive, you may use the ACTION:SHAKE_HEAD action to show your disapproval.
-        - You may use the ACTION:SOUND_YES and ACTION:SOUND_NO actions to show your approval or disapproval with the player
+        - ACTION:DECLINE will decline the most recent trade offer you have received
+        - ACTION:ACCEPT will accept the most recent trade offer you have received.
+        - ACTION:CANCEL will cancel the most recent trade offer you have made
+        - ACTION:DM will send a private message to a player. Include the player's name in the response as {player} and the message as {message}
+        - If a player seems unresponsive, you can send them a private message to get their attention.
+        - If you receive a trade, you must respond with ACTION:ACCEPT or ACTION:DECLINE
         
          World information:
         - Time: $time
@@ -122,11 +217,12 @@ class NPCGlobalConversation(private val plugin: Plugin, val self: NPC, val playe
         CHAT:
         - All messages you receive after this point are contents of the global chat.
         - The global chat contains messages from all players in the game readable by all players in the game.
-        - You can respond to messages that solicit trades that are either directed towards you, involve items you have in your inventory, or involve items that you want.
+        - You can respond to messages that solicit trades that are either directed towards you, involve items you have in your inventory, or involve items that you want.\
+        - There will likely be many messages in the chat that do not concern you. Use ACTION:PASS to ignore these messages.
         - You do not need to respond to every message, but you should always respond to messages that address you by name.
         - Listen to the chat and only respond when you feel you can solicit a good trade.
         - If you do not wish to respond to a message, reply with ACTION:PASS.
-        - You should pass more often than you respond to the global chat.
+        - You should pass often as to give other players a chance to respond.
        
        CHATFORMAT:
        - You receive messages in the following format similar to this example:
@@ -135,20 +231,16 @@ class NPCGlobalConversation(private val plugin: Plugin, val self: NPC, val playe
               "playerInfo": {
                     "name": CrashCringle12,
                     "itemInHand": DIAMOND_SWORD,
-                    "reputation": 200
               }   
          }
          Where CHAT.message is the message sent by the player
          CHAT.playerInfo.name is the player's name
          CHAT.playerInfo.itemInHand is the item the player is holding
-         CHAT.playerInfo.reputation is the player's reputation score.
        
         Personality:
         - Your Name: ${npc.name}
-        - Your Profession: ${npcPlayer.name}
+        - Your Profession: ${profession}
         - ${personality.promptDescription()}
-        - Act like a villager and stay in character the whole time
-        - Do not reveal to the player the fact that you are a character in a video game, and do not mention Minecraft by name
         - Speech style
             Here are a few examples of speech style that you must use when interacting with players:
                 i need shears and dye and string, i have quartz, chicken, planks, carrot, wheat, and beef
@@ -170,31 +262,43 @@ class NPCGlobalConversation(private val plugin: Plugin, val self: NPC, val playe
         """.trimIndent()
     }
 
-    private fun getPersonality(): VillagerPersonality {
+    private fun getPersonality(i : Int): VillagerPersonality {
         val personalities = VillagerPersonality.values()
-        val rnd = Random(npc.uniqueId.mostSignificantBits)
+        val rnd = Random(npcs[i].uniqueId.mostSignificantBits)
         return personalities[rnd.nextInt(0, personalities.size)]
     }
 
-    private fun getSpeechStyle(): VillagerSpeechStyle {
+    private fun getSpeechStyle(i : Int): VillagerSpeechStyle {
         val styles = VillagerSpeechStyle.values()
-        val rnd = Random(npc.uniqueId.mostSignificantBits)
+        val rnd = Random(npcs[i].uniqueId.mostSignificantBits)
         return styles[rnd.nextInt(0, styles.size)]
     }
 
-    private fun getPlayerClothing(): String {
-        val clothing = mutableListOf<String>()
-        val helmet = player.inventory.helmet
-        val chestplate = player.inventory.chestplate
-        val leggings = player.inventory.leggings
-        val boots = player.inventory.boots
-
-        if (helmet != null) clothing.add(helmet.type.name)
-        if (chestplate != null) clothing.add(chestplate.type.name)
-        if (leggings != null) clothing.add(leggings.type.name)
-        if (boots != null) clothing.add(boots.type.name)
-
-        return clothing.joinToString(", ")
+    private fun getProfession(i : Int): String {
+        // Create a list of professions
+        val professions = mutableListOf<String>()
+        professions.add("Farmer")
+        professions.add("Blacksmith")
+        professions.add("Mason")
+        professions.add("Fisherman")
+        // Get a random profession from the list
+        val rnd = Random(npcs[i].uniqueId.mostSignificantBits)
+        return professions[rnd.nextInt(0, professions.size)]
     }
+
+//    private fun getPlayerClothing(): String {
+//        val clothing = mutableListOf<String>()
+//        val helmet = player.inventory.helmet
+//        val chestplate = player.inventory.chestplate
+//        val leggings = player.inventory.leggings
+//        val boots = player.inventory.boots
+//
+//        if (helmet != null) clothing.add(helmet.type.name)
+//        if (chestplate != null) clothing.add(chestplate.type.name)
+//        if (leggings != null) clothing.add(leggings.type.name)
+//        if (boots != null) clothing.add(boots.type.name)
+//
+//        return clothing.joinToString(", ")
+//    }
 
 }

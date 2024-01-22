@@ -1,5 +1,9 @@
 package tj.horner.npcgpt.conversation
 
+import crashcringle.malmoserverplugin.barterkings.npc.BarterTrait
+import crashcringle.malmoserverplugin.barterkings.players.BarterGame
+import crashcringle.malmoserverplugin.barterkings.players.Participant
+import net.citizensnpcs.api.CitizensAPI
 import net.citizensnpcs.api.npc.NPC
 import org.bukkit.Bukkit
 import org.bukkit.entity.Player
@@ -9,6 +13,8 @@ import tj.horner.villagergpt.conversation.NPCConversation
 import tj.horner.villagergpt.conversation.NPCGlobalConversation
 import tj.horner.villagergpt.events.NPCConversationEndEvent
 import tj.horner.villagergpt.events.NPCConversationStartEvent
+import tj.horner.villagergpt.events.NPCGlobalConversationEndEvent
+import tj.horner.villagergpt.events.NPCGlobalConversationStartEvent
 
 class NPCConversationManager(private val plugin: Plugin) {
     private val conversations: MutableList<NPCConversation> = mutableListOf()
@@ -34,6 +40,7 @@ class NPCConversationManager(private val plugin: Plugin) {
     }
 
     fun getGlobalConversation(): NPCGlobalConversation? {
+
         return globalConversation
     }
 
@@ -48,33 +55,48 @@ class NPCConversationManager(private val plugin: Plugin) {
         return getConversation(player, npc)
     }
 
-    private fun getConversation(player: Player, npc: NPC): NPCConversation {
-        if (globalConversation != null) {
-            return globalConversation as NPCGlobalConversation
+    fun startGlobalConversation(): NPCGlobalConversation? {
+        val npcs = mutableListOf<NPC>()
+        for (npc in CitizensAPI.getNPCRegistry()) {
+            plugin.logger.info("Checking NPC: ${npc.name}")
+            npc.traits.forEach() {
+                if (it.name == "barterplus") {
+                    plugin.logger.info("Found BarterPlus NPC: ${npc.name}")
+                    npcs.add(npc)
+                }
+            }
         }
+        globalConversation = NPCGlobalConversation(plugin, npcs,
+                Bukkit.getOnlinePlayers() as MutableList<Player>
+        )
+        val startEvent = NPCGlobalConversationStartEvent(globalConversation!!)
+        plugin.server.pluginManager.callEvent(startEvent)
+        return globalConversation
+    }
+
+    private fun getConversation(player: Player, npc: NPC): NPCConversation {
         var conversation = conversations.firstOrNull { it.player.uniqueId == player.uniqueId && it.npc.uniqueId == npc.uniqueId }
 
         if (conversation == null) {
             conversation = NPCConversation(plugin, npc, player)
             conversations.add(conversation)
-            if (globalConversation == null) {
-                globalConversation = NPCGlobalConversation(plugin, npc,
-                    Bukkit.getOnlinePlayers() as MutableList<Player>
-                )
-                val startEvent = NPCConversationStartEvent(globalConversation!!)
-                plugin.server.pluginManager.callEvent(startEvent)
-            }
             val startEvent = NPCConversationStartEvent(conversation)
             plugin.server.pluginManager.callEvent(startEvent)
         }
-
-
-
         return conversation
     }
 
     fun endConversation(conversation: NPCConversation) {
         endConversations(listOf(conversation))
+    }
+
+    fun endGlobalConversation() {
+        if (globalConversation != null) {
+            val endEvent = NPCGlobalConversationEndEvent(globalConversation!!)
+            plugin.server.pluginManager.callEvent(endEvent)
+            globalConversation = null
+        }
+
     }
 
     private fun endConversations(conversationsToEnd: Collection<NPCConversation>) {

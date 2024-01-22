@@ -1,6 +1,9 @@
 package tj.horner.villagergpt.conversation.pipeline.processors
 
 import com.google.gson.Gson
+import crashcringle.malmoserverplugin.api.TradeRequestEvent
+import crashcringle.malmoserverplugin.barterkings.BarterKings
+import crashcringle.malmoserverplugin.barterkings.trades.Trade
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.TextComponent
 import net.kyori.adventure.text.event.HoverEvent
@@ -17,6 +20,14 @@ import tj.horner.villagergpt.conversation.pipeline.actions.SendPlayerMessageActi
 import tj.horner.villagergpt.conversation.pipeline.actions.SetTradesAction
 import java.util.logging.Level
 import java.util.logging.Logger
+import crashcringle.malmoserverplugin.barterkings.trades.TradeController;
+import crashcringle.malmoserverplugin.barterkings.trades.TradeRequest
+import net.citizensnpcs.api.npc.NPC
+import org.bukkit.entity.Player
+import org.hibernate.internal.util.collections.CollectionHelper.listOf
+import tj.horner.villagergpt.conversation.NPCGlobalConversation
+import tj.horner.villagergpt.conversation.pipeline.actions.SendGlobalMessageAction
+import tj.horner.villagergpt.conversation.pipeline.actions.SendNPCMessageAction
 
 class TradeOfferProcessor(private val logger: Logger) : ConversationMessageProcessor {
     private val gson = Gson()
@@ -26,7 +37,7 @@ class TradeOfferProcessor(private val logger: Logger) : ConversationMessageProce
         val tradeExpressionRegex = Regex("TRADE(\\[.+?\\])ENDTRADE")
         val splitMessage = splitWithMatches(message, tradeExpressionRegex)
 
-        val trades = mutableListOf<MerchantRecipe>()
+        val trades = mutableListOf<Trade>()
 
         val messageComponent = Component.text().content("")
 
@@ -35,7 +46,7 @@ class TradeOfferProcessor(private val logger: Logger) : ConversationMessageProce
                 val response = it.trim().replace(Regex("(^TRADE)|(ENDTRADE$)"), "")
 
                 try {
-                    val trade = parseTradeResponse(response)
+                    val trade = parseNPCTradeResponse(response, conversation.npc)
                     trades.add(trade)
 
                     val tradeMessage = chatFormattedRecipe(trade)
@@ -50,24 +61,76 @@ class TradeOfferProcessor(private val logger: Logger) : ConversationMessageProce
         }
 
         val formattedMessage = MessageFormatter.formatMessageFromNPC(messageComponent.build(), conversation.npc)
-
         return listOf(
-            //SetTradesAction(conversation.npc, trades),
+            SetTradesAction(conversation.npc, trades),
             SendPlayerMessageAction(conversation.player, formattedMessage)
         )
     }
 
-    private fun parseTradeResponse(text: String): MerchantRecipe {
+    override fun processMessage(message: String, conversation: NPCGlobalConversation, npc : NPC): Collection<ConversationMessageAction> {
+        val tradeExpressionRegex = Regex("TRADE(\\[.+?\\])ENDTRADE")
+        val splitMessage = splitWithMatches(message, tradeExpressionRegex)
+
+        val trades = mutableListOf<Trade>()
+
+        val messageComponent = Component.text().content("")
+
+        splitMessage.forEach {
+            if (it.trim().startsWith("TRADE")) {
+                val response = it.trim().replace(Regex("(^TRADE)|(ENDTRADE$)"), "")
+
+                try {
+                    val trade = parseNPCTradeResponse(response, npc)
+                    trades.add(trade)
+
+                    val tradeMessage = chatFormattedRecipe(trade)
+                    messageComponent.append(tradeMessage)
+                } catch(e: Exception) {
+                    logger.log(Level.WARNING, "Chat response contained invalid trade: $response", e)
+                    messageComponent.append(invalidTradeComponent(response))
+                }
+            } else {
+                messageComponent.append(Component.text(it).color(NamedTextColor.WHITE))
+            }
+        }
+
+        val formattedMessage = MessageFormatter.formatMessageFromGlobal(messageComponent.build(), npc.name)
+        return listOf(
+                SetTradesAction(npc, trades),
+                SendGlobalMessageAction(formattedMessage),
+                SendNPCMessageAction(npc, conversation, formattedMessage)
+        )
+    }
+
+    private fun parseVillagerTradeResponse(text: String): MerchantRecipe {
         val tradeList = gson.fromJson(text, arrayListOf(arrayListOf<String>()).javaClass)
 
         val ingredients = tradeList[0].map { parseItemStack(it) }
         val results = tradeList[1].map { parseItemStack(it) }
-
         val recipe = MerchantRecipe(results[0], 1)
         recipe.ingredients = ingredients
 
         return recipe
     }
+
+    private fun parseNPCTradeResponse(text: String, npc: NPC): Trade {
+        // Log the text
+        logger.info("Trade response: $text")
+        val tradeList = gson.fromJson(text, arrayListOf(arrayListOf<String>()).javaClass)
+        val player = tradeList[0].map { parsePlayer(it) }
+        val ingredients = tradeList[1].map { parseItemStack(it) }
+        val results = tradeList[2].map { parseItemStack(it) }
+        var trade = Trade(ingredients[0], results[0]);
+        // Cast npc.entity to Player to get the player's UUID
+        if (npc.entity is Player) {
+            Bukkit.getServer().dispatchCommand(Bukkit.getConsoleSender(), "barter trade ${npc.name} ${trade.requestedItems[0].amount} ${trade.requestedItems[0].type} ${trade.offeredItems[0].amount} ${trade.offeredItems[0].type} ${player[0]?.name}")
+            logger.info("Command: barter trade ${npc.name} ${trade.requestedItems[0].amount} ${trade.requestedItems[0].type} ${trade.offeredItems[0].amount} ${trade.offeredItems[0].type} ${player[0]?.name}")
+            return trade;
+        } else {
+            throw Exception("NPC is not a player");
+        }
+    }
+
 
     private fun parseItemStack(text: String): ItemStack {
         val matches = Regex("([0-9]+) (.+)").find(text) ?: return ItemStack(Material.AIR)
@@ -78,25 +141,38 @@ class TradeOfferProcessor(private val logger: Logger) : ConversationMessageProce
 
         return stack
     }
+    private fun parsePlayer(text: String): Player? {
+        val matches = Regex("([0-9]+) (.+)").find(text)?: return Bukkit.getPlayer("CrashCringle12")
 
-    private fun chatFormattedRecipe(recipe: MerchantRecipe): TextComponent {
-        val component = Component.text().content("[")
+        val (materialString) = matches.destructured
+        val player = Bukkit.getPlayer(materialString)
+        return player
+    }
 
-        recipe.ingredients.forEachIndexed { index, it ->
+    private fun chatFormattedRecipe(trade: Trade): TextComponent {
+        val component = Component.text().content("is offering ")
+
+        trade.offeredItems.forEachIndexed { index, it ->
             component.append(Component.text("${it.amount} ").color(NamedTextColor.LIGHT_PURPLE))
             component.append(it.displayName())
 
-            if (index + 1 < recipe.ingredients.count())
+            if (index + 1 < trade.offeredItems.count())
                 component.append(Component.text(" + "))
             else
                 component.append(Component.text(" "))
         }
 
-        component.append(Component.text("→ "))
-        component.append(Component.text("${recipe.result.amount} ").color(NamedTextColor.LIGHT_PURPLE))
-        component.append(recipe.result.displayName())
-        component.append(Component.text("]"))
+        component.append(Component.text("in exchange for "))
+        trade.requestedItems.forEachIndexed { index, it ->
+            component.append(Component.text("${it.amount} ").color(NamedTextColor.LIGHT_PURPLE))
+            component.append(it.displayName())
 
+            if (index + 1 < trade.requestedItems.count())
+                component.append(Component.text(" + "))
+            else
+                component.append(Component.text(" "))
+        }
+        component.append(Component.text(". Use an ACTION to accept or decline."))
         component.color(NamedTextColor.DARK_GREEN)
 
         return component.build()

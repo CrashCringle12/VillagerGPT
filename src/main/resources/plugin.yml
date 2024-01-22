@@ -2,6 +2,8 @@ name: VillagerGPT
 version: '${version}'
 main: tj.horner.villagergpt.VillagerGPT
 api-version: 1.19
+depend:
+  - MalmoServerPlugin
 commands:
   ttv:
     description: Start a conversation with a villager
