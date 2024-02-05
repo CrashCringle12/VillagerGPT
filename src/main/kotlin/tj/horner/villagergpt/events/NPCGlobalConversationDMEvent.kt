@@ -6,9 +6,9 @@ import org.bukkit.event.Event
 import org.bukkit.event.HandlerList
 import tj.horner.villagergpt.conversation.NPCGlobalConversation
 
-class NPCGlobalConversationResponseEvent(val npc: NPC, val conversation: NPCGlobalConversation, val message: Component) : Event(true) {
+class NPCGlobalConversationDMEvent(val npc: NPC, val target: NPC, val conversation: NPCGlobalConversation, val message: Component) : Event(true) {
     companion object {
-        internal val handlers = HandlerList()
+        private val handlers = HandlerList()
 
         @Suppress("unused")
         @JvmStatic
@@ -16,6 +16,6 @@ class NPCGlobalConversationResponseEvent(val npc: NPC, val conversation: NPCGlob
     }
 
     override fun getHandlers(): HandlerList {
-        return NPCGlobalConversationResponseEvent.handlers
+        return NPCGlobalConversationDMEvent.handlers
     }
 }

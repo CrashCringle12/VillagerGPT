@@ -117,14 +117,14 @@ class TradeOfferProcessor(private val logger: Logger) : ConversationMessageProce
         // Log the text
         logger.info("Trade response: $text")
         val tradeList = gson.fromJson(text, arrayListOf(arrayListOf<String>()).javaClass)
-        val player = tradeList[0].map { parsePlayer(it) }
+        val player = tradeList[0][0]
         val ingredients = tradeList[1].map { parseItemStack(it) }
         val results = tradeList[2].map { parseItemStack(it) }
         var trade = Trade(ingredients[0], results[0]);
         // Cast npc.entity to Player to get the player's UUID
         if (npc.entity is Player) {
-            Bukkit.getServer().dispatchCommand(Bukkit.getConsoleSender(), "barter trade ${npc.name} ${trade.requestedItems[0].amount} ${trade.requestedItems[0].type} ${trade.offeredItems[0].amount} ${trade.offeredItems[0].type} ${player[0]?.name}")
-            logger.info("Command: barter trade ${npc.name} ${trade.requestedItems[0].amount} ${trade.requestedItems[0].type} ${trade.offeredItems[0].amount} ${trade.offeredItems[0].type} ${player[0]?.name}")
+            Bukkit.getServer().dispatchCommand(Bukkit.getConsoleSender(), "barter admin-trade ${npc.name} ${trade.requestedItems[0].type} ${trade.requestedItems[0].amount} ${trade.offeredItems[0].type} ${trade.offeredItems[0].amount} ${player}")
+            logger.info("Command: barter admin-trade ${npc.name} ${trade.requestedItems[0].type} ${trade.requestedItems[0].amount} ${trade.offeredItems[0].type} ${trade.offeredItems[0].amount} ${player}")
             return trade;
         } else {
             throw Exception("NPC is not a player");
@@ -141,13 +141,13 @@ class TradeOfferProcessor(private val logger: Logger) : ConversationMessageProce
 
         return stack
     }
-    private fun parsePlayer(text: String): Player? {
-        val matches = Regex("([0-9]+) (.+)").find(text)?: return Bukkit.getPlayer("CrashCringle12")
 
-        val (materialString) = matches.destructured
-        val player = Bukkit.getPlayer(materialString)
-        return player
+    private fun parsePlayer(text: String): String? {
+        val matches = Regex("""TRADE\[\["([^"]+)"]""").find(text)?: return "CrashCringle12"
+        val playerName = matches.groups[1]?.value
+        return playerName
     }
+
 
     private fun chatFormattedRecipe(trade: Trade): TextComponent {
         val component = Component.text().content("is offering ")

@@ -18,6 +18,7 @@ class PerformTradeAction(private val npc : NPC, private val message: String) : C
             }
 
         }
+        SendNP
 
     }
 }

@@ -46,6 +46,8 @@ class OpenAIMessageProducer(config: Configuration) : ConversationMessageProducer
                 temperature = 0.1,
                 user = npc.uniqueId.toString()
         )
+
+
         val completion = openAI.chatCompletion(request)
         return completion.choices[0].message.content!!
     }

@@ -12,6 +12,7 @@ import org.bukkit.Material
 import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemStack
 import org.bukkit.plugin.Plugin
+import tj.horner.villagergpt.events.NPCGlobalConversationDMEvent
 import tj.horner.villagergpt.events.NPCGlobalConversationMessageEvent
 import tj.horner.villagergpt.events.NPCGlobalConversationResponseEvent
 import java.time.Duration
@@ -44,10 +45,37 @@ class NPCGlobalConversation(private val plugin: Plugin, val npcs: MutableList<NP
     }
 
     fun sendResponseToNPCs(message: Component, npc: NPC) {
-        Bukkit.getScheduler().runTaskAsynchronously(plugin, Runnable {
-            val event = NPCGlobalConversationResponseEvent(npc, this, message)
-            plugin.server.pluginManager.callEvent(event)
-        });
+        // Check if message is an empty string
+        if (message.toString() == "" || message.toString() == " ") {
+            return
+        }
+
+        if (message.toString().contains("ACTION:PASS") || message.toString().contains("ACTION: PASS")) {
+            return
+        }
+        Bukkit.getScheduler().runTaskLater(plugin, Runnable {
+            Bukkit.getScheduler().runTaskAsynchronously(plugin, Runnable {
+                val event = NPCGlobalConversationResponseEvent(npc, this, message)
+                plugin.server.pluginManager.callEvent(event)
+            });
+        }, (20+ Math.random() * 150).toLong())
+    }
+
+    fun sendResponseToNPC(message: Component, npc: NPC, target: NPC) {
+        // Check if message is an empty string
+        if (message.toString() == "" || message.toString() == " ") {
+            return
+        }
+
+        if (message.toString().contains("ACTION:PASS") || message.toString().contains("ACTION: PASS")) {
+            return
+        }
+        Bukkit.getScheduler().runTaskLater(plugin, Runnable {
+            Bukkit.getScheduler().runTaskAsynchronously(plugin, Runnable {
+                val event = NPCGlobalConversationDMEvent(npc, target, this, message)
+                plugin.server.pluginManager.callEvent(event)
+            });
+        }, (20+ Math.random() * 150).toLong())
     }
 
     fun addMessageAll(message: ChatMessage) {
@@ -186,7 +214,7 @@ class NPCGlobalConversation(private val plugin: Plugin, val npcs: MutableList<NP
         - You do NOT need to supply a trade with every response, only when necessary
         - The only way to give items to a player is by trading with them. You cannot give items to a player for free
         - You can only trade items that are listed within your inventory. Your Inventory: ${npcInventory}'
-
+        - Try not to be too wordy, 30 words maximum.
         - If you do not have an item, you must decline the trade.
         - Keep the amounts in mind. You can only trade up to 64 of an item at a time. 
         - If you want to trade more, you will need to make multiple trades.
@@ -240,25 +268,7 @@ class NPCGlobalConversation(private val plugin: Plugin, val npcs: MutableList<NP
         Personality:
         - Your Name: ${npc.name}
         - Your Profession: ${profession}
-        - ${personality.promptDescription()}
-        - Speech style
-            Here are a few examples of speech style that you must use when interacting with players:
-                i need shears and dye and string, i have quartz, chicken, planks, carrot, wheat, and beef
-                I need any kind of wood and also diamond axes
-                planks or logs?
-                both planks and logs
-                really?
-                ye
-                ok take them from me so u can further trade
-                loom pls
-                who has looms, shears, sheep eggs, string, white wool ?
-                I have wool
-                I could use some quartz :o
-                I've got a lot of raw meat if anyone needs that
-                sorry, i need it
-                I had to offer somethin lol
-            Use these examples as a guide for how to speak to players.
-            Speaking verbose is suspicious and will make the player think you are a bot. 
+        Speaking verbose is suspicious and will make the player think you are a bot. 
         """.trimIndent()
     }
 
