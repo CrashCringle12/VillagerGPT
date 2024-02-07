@@ -58,10 +58,11 @@ class ActionProcessor(private val plugin: VillagerGPT)  : ConversationMessagePro
     }
 
     private fun textToAction(text: String, conversation: NPCGlobalConversation, npc : NPC): ConversationMessageAction? {
+        plugin.logger.info("Action: $text")
         return when (text) {
-            "DECLINE" -> PerformTradeAction(npc, "decline")
-            "ACCEPT" -> PerformTradeAction(npc, "accept")
-            "CANCEL" -> PerformTradeAction(npc, "cancel")
+            "DECLINE" -> PerformTradeAction(npc, conversation,"decline")
+            "ACCEPT" -> PerformTradeAction(npc, conversation, "accept")
+            "CANCEL" -> PerformTradeAction(npc, conversation, "cancel")
             "DM" -> Bukkit.getPlayer("CrashCringle12")?.let { SendPlayerMessageAction(it, Component.text(text)) }
             else -> null
         }

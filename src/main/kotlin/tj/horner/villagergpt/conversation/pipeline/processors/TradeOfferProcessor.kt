@@ -123,8 +123,8 @@ class TradeOfferProcessor(private val logger: Logger) : ConversationMessageProce
         var trade = Trade(ingredients[0], results[0]);
         // Cast npc.entity to Player to get the player's UUID
         if (npc.entity is Player) {
-            Bukkit.getServer().dispatchCommand(Bukkit.getConsoleSender(), "barter admin-trade ${npc.name} ${trade.requestedItems[0].type} ${trade.requestedItems[0].amount} ${trade.offeredItems[0].type} ${trade.offeredItems[0].amount} ${player}")
-            logger.info("Command: barter admin-trade ${npc.name} ${trade.requestedItems[0].type} ${trade.requestedItems[0].amount} ${trade.offeredItems[0].type} ${trade.offeredItems[0].amount} ${player}")
+            Bukkit.getServer().dispatchCommand(Bukkit.getConsoleSender(), "barter admin-trade  ${npc.name} ${trade.offeredItems[0].type} ${trade.offeredItems[0].amount} ${trade.requestedItems[0].type} ${trade.requestedItems[0].amount} ${player}")
+            logger.info("Command: barter admin-trade ${npc.name} ${trade.offeredItems[0].type} ${trade.offeredItems[0].amount} ${trade.requestedItems[0].type} ${trade.requestedItems[0].amount} ${player}")
             return trade;
         } else {
             throw Exception("NPC is not a player");

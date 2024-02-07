@@ -23,14 +23,14 @@ class OpenAIMessageProducer(config: Configuration) : ConversationMessageProducer
         )
     )
 
-    private val model = ModelId(config.getString("openai-model") ?: "gpt-3.5-turbo")
+    private val model = ModelId("gpt-3.5-turbo-0125")
 
     @OptIn(BetaOpenAI::class)
     override suspend fun produceNextMessage(conversation: NPCConversation): String {
         val request = ChatCompletionRequest(
             model = model,
             messages = conversation.messages,
-            temperature = 0.1,
+            temperature = 0.5,
             user = conversation.player.uniqueId.toString()
         )
 

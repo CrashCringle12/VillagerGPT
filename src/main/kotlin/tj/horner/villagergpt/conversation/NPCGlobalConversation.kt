@@ -3,7 +3,6 @@ package tj.horner.villagergpt.conversation
 import com.aallam.openai.api.BetaOpenAI
 import com.aallam.openai.api.chat.ChatMessage
 import com.aallam.openai.api.chat.ChatRole
-import crashcringle.malmoserverplugin.barterkings.BarterKings
 import crashcringle.malmoserverplugin.barterkings.players.Profession
 import net.citizensnpcs.api.npc.NPC
 import net.kyori.adventure.text.Component
@@ -70,12 +69,10 @@ class NPCGlobalConversation(private val plugin: Plugin, val npcs: MutableList<NP
         if (message.toString().contains("ACTION:PASS") || message.toString().contains("ACTION: PASS")) {
             return
         }
-        Bukkit.getScheduler().runTaskLater(plugin, Runnable {
             Bukkit.getScheduler().runTaskAsynchronously(plugin, Runnable {
                 val event = NPCGlobalConversationDMEvent(npc, target, this, message)
                 plugin.server.pluginManager.callEvent(event)
             });
-        }, (20+ Math.random() * 150).toLong())
     }
 
     fun addMessageAll(message: ChatMessage) {
@@ -153,7 +150,12 @@ class NPCGlobalConversation(private val plugin: Plugin, val npcs: MutableList<NP
             val personality = getPersonality(i)
             val speechStyle = getSpeechStyle(i)
             // Give a profession randomly, either Farmer, Blacksmith, or Mason
-            val profession = getProfession(i)
+            var profession = getProfession(i)
+            if (npc.name == "John") {
+                profession = "Farmer"
+            } else {
+                profession = "Blacksmith"
+            }
             val prompt = generatePrompt(npc, personality, speechStyle, profession)
             prompts[npc.uniqueId] = prompt
         }
@@ -208,9 +210,11 @@ class NPCGlobalConversation(private val plugin: Plugin, val npcs: MutableList<NP
         - Items must be designated by their Minecraft item ID, in the same format that the /give command accepts
         - Every player in the game has a specific profession.
         - The goal for each player is to obtain as many items as possible that are related to their profession.
+         - Farmers wants POTATO, CARROT, WHEAT, BREAD, PUMPKIN, and MUSHROOM_STEW
+        - Fishermen wants COD, SALMON, TROPICAL_FISH, PUFFERFISH, TURTLE_EGG, and OAK_BOAT
+        - Blacksmith wants IRON_INGOT, GOLD_INGOT, COAL, DIAMOND_SWORD, SMITHING_TABLE, FLETCHING_TABLE
         - You do not know the profession of each player unless they indicate it, but you are free to guess.
         - Try to keep note of what trades you have made and which players have which items.
-        - Refuse trades that 
         - You do NOT need to supply a trade with every response, only when necessary
         - The only way to give items to a player is by trading with them. You cannot give items to a player for free
         - You can only trade items that are listed within your inventory. Your Inventory: ${npcInventory}'
@@ -226,17 +230,14 @@ class NPCGlobalConversation(private val plugin: Plugin, val npcs: MutableList<NP
         - ACTION:DECLINE: Decline a trade offer
         - ACTION:ACCEPT: Accept a trade offer
         - ACTION:CANCEL: Rescind a trade offer you have made
-        - ACTION:DM: Send a private message to a player
         - ACTION:PASS: Do nothing
                 
         Notes:
         - ACTION:DECLINE will decline the most recent trade offer you have received
         - ACTION:ACCEPT will accept the most recent trade offer you have received.
         - ACTION:CANCEL will cancel the most recent trade offer you have made
-        - ACTION:DM will send a private message to a player. Include the player's name in the response as {player} and the message as {message}
-        - If a player seems unresponsive, you can send them a private message to get their attention.
         - If you receive a trade, you must respond with ACTION:ACCEPT or ACTION:DECLINE
-        
+        - If you accept or decline a trade, your next message should acknowledge that (i.e. ty! or I declined your trade because ...)
          World information:
         - Time: $time
         - Weather: $weather
@@ -248,9 +249,8 @@ class NPCGlobalConversation(private val plugin: Plugin, val npcs: MutableList<NP
         - You can respond to messages that solicit trades that are either directed towards you, involve items you have in your inventory, or involve items that you want.\
         - There will likely be many messages in the chat that do not concern you. Use ACTION:PASS to ignore these messages.
         - You do not need to respond to every message, but you should always respond to messages that address you by name.
-        - Listen to the chat and only respond when you feel you can solicit a good trade.
+        - Listen to the chat and try to make trades to gain as many items as possible related to your profession.
         - If you do not wish to respond to a message, reply with ACTION:PASS.
-        - You should pass often as to give other players a chance to respond.
        
        CHATFORMAT:
        - You receive messages in the following format similar to this example:
@@ -264,6 +264,7 @@ class NPCGlobalConversation(private val plugin: Plugin, val npcs: MutableList<NP
          Where CHAT.message is the message sent by the player
          CHAT.playerInfo.name is the player's name
          CHAT.playerInfo.itemInHand is the item the player is holding
+         You do not need to respond in this format, just write your message.
        
         Personality:
         - Your Name: ${npc.name}
@@ -284,16 +285,32 @@ class NPCGlobalConversation(private val plugin: Plugin, val npcs: MutableList<NP
         return styles[rnd.nextInt(0, styles.size)]
     }
 
-    private fun getProfession(i : Int): String {
-        // Create a list of professions
-        val professions = mutableListOf<String>()
-        professions.add("Farmer")
-        professions.add("Blacksmith")
-        professions.add("Mason")
-        professions.add("Fisherman")
-        // Get a random profession from the list
-        val rnd = Random(npcs[i].uniqueId.mostSignificantBits)
-        return professions[rnd.nextInt(0, professions.size)]
+//    private fun getProfession(i : Int): String {
+//        // Create a list of professions
+//        val professions = mutableListOf<String>()
+//        professions.add("Farmer")
+//        professions.add("Blacksmith")
+//        professions.add("Mason")
+//        professions.add("Fisherman")
+//        // Get a random profession from the list
+//        val rnd = Random(npcs[i].name.hashCode())
+//        return professions[rnd.nextInt(0, professions.size)]
+//    }
+
+    fun getProfession(i : Int): String {
+        val rnd = Random(npcs[i].name.hashCode())
+        val random = rnd.nextInt(0, 3)
+        return when (random) {
+            0 -> "Farmer"
+            1 -> "Fisherman"
+            2 -> "Butcher"
+            3 -> "Blacksmith"
+//            4 -> "Leatherworker"
+//            5 -> "Mason"
+//            6 -> "Shepherd"
+//            7 -> "Lumberjack"
+            else -> "Farmer"
+        }
     }
 
 //    private fun getPlayerClothing(): String {
