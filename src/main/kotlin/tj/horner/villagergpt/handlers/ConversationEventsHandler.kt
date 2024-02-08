@@ -77,129 +77,123 @@ class ConversationEventsHandler(private val plugin: VillagerGPT) : Listener {
         val npc = evt.npc as NPC
         plugin.conversationManager.startGlobalConversation()
         plugin.logger.info("Global conversation started")
-//        // Npc is in a conversation with another player
-//        val existingConversation = plugin.conversationManager.getConversation(npc)
-//        if (existingConversation != null && existingConversation.player.uniqueId != evt.clicker.uniqueId) {
-//            val message = Component.text("This npc is in a conversation with ")
-//                .append(existingConversation.player.displayName())
+        // Npc is in a conversation with another player
+        val existingConversation = plugin.conversationManager.getConversation(npc)
+        if (existingConversation != null && existingConversation.player.uniqueId != evt.clicker.uniqueId) {
+            val message = Component.text("This npc is in a conversation with ")
+                .append(existingConversation.player.displayName())
+                .decorate(TextDecoration.ITALIC)
+
+            evt.clicker.sendMessage(ChatMessageTemplate.withPluginNamePrefix(message))
+            evt.isCancelled = true
+            return
+        }
+
+        if (!evt.clicker.hasMetadata(MetadataKey.SelectingNpc)) return
+
+        // Player is selecting a villager for conversation
+        evt.isCancelled = true
+
+//        if (villager.profession == Villager.Profession.NONE) {
+//            val message = Component.text("You can only speak to villagers with a profession")
 //                .decorate(TextDecoration.ITALIC)
 //
-//            evt.clicker.sendMessage(ChatMessageTemplate.withPluginNamePrefix(message))
-//            evt.isCancelled = true
+//            evt.player.sendMessage(ChatMessageTemplate.withPluginNamePrefix(message))
 //            return
 //        }
-//
-//        if (!evt.clicker.hasMetadata(MetadataKey.SelectingNpc)) return
-//
-//        // Player is selecting a villager for conversation
-//        evt.isCancelled = true
-//
-////        if (villager.profession == Villager.Profession.NONE) {
-////            val message = Component.text("You can only speak to villagers with a profession")
-////                .decorate(TextDecoration.ITALIC)
-////
-////            evt.player.sendMessage(ChatMessageTemplate.withPluginNamePrefix(message))
-////            return
-////        }
-//
-//        plugin.conversationManager.startConversation(evt.clicker, npc)
-//        evt.clicker.removeMetadata(MetadataKey.SelectingNpc, plugin)
+
+        plugin.conversationManager.startConversation(evt.clicker, npc)
+        evt.clicker.removeMetadata(MetadataKey.SelectingNpc, plugin)
     }
 
     @EventHandler
     suspend fun onSendMessage(evt: AsyncChatEvent) {
 
 
-//        val conversation = plugin.conversationManager.getConversation(evt.player)
-//        if (conversation != null) {
-//            evt.isCancelled = true
-//            if (conversation.pendingResponse) {
-//                val message = Component.text("Please wait for ")
-//                        .append(conversation.npc.entity.name().color(NamedTextColor.AQUA))
-//                        .append(Component.text(" to respond"))
-//                        .decorate(TextDecoration.ITALIC)
-//
-//                evt.player.sendMessage(ChatMessageTemplate.withPluginNamePrefix(message))
-//                return
-//            }
-//
-//            conversation.pendingResponse = true
-//            val npc = conversation.npc
-//
-//            try {
-//                val pipeline = plugin.messagePipeline
-//
-//                val playerMessage = PlainTextComponentSerializer.plainText().serialize(evt.originalMessage())
-//                val formattedPlayerMessage =
-//                        MessageFormatter.formatMessageFromPlayer(Component.text(playerMessage), npc)
-//
-//                evt.player.sendMessage(formattedPlayerMessage)
-//
-//                val actions = pipeline.run(playerMessage, conversation)
-//                if (!conversation.ended) {
-//                    withContext(plugin.minecraftDispatcher) {
-//                        actions.forEach { it.run() }
-//                    }
-//                }
-//            } catch (e: Exception) {
-//                val message = Component.text("Something went wrong while getting ")
-//                        .append(npc.entity.name().color(NamedTextColor.AQUA))
-//                        .append(Component.text("'s response. Please try again"))
-//                        .decorate(TextDecoration.ITALIC)
-//
-//                evt.player.sendMessage(ChatMessageTemplate.withPluginNamePrefix(message))
-//                throw (e)
-//            } finally {
-//                conversation.pendingResponse = false
-//            }
-//        }
-        if (evt.message().toString().equals("BEGINTEST")) {
-            if (plugin.conversationManager.getGlobalConversation() == null) {
-                plugin.conversationManager.startGlobalConversation()
-                plugin.logger.info("Global conversation started")
-            }
-        }
+        val conversation = plugin.conversationManager.getConversation(evt.player)
+        if (conversation != null) {
+            evt.isCancelled = true
+            if (conversation.pendingResponse) {
+                val message = Component.text("Please wait for ")
+                        .append(conversation.npc.entity.name().color(NamedTextColor.AQUA))
+                        .append(Component.text(" to respond"))
+                        .decorate(TextDecoration.ITALIC)
 
-        val globalConversation = plugin.conversationManager.getGlobalConversation()
-        if (globalConversation != null) {
+                evt.player.sendMessage(ChatMessageTemplate.withPluginNamePrefix(message))
+                return
+            }
+
+            conversation.pendingResponse = true
+            val npc = conversation.npc
+
             try {
                 val pipeline = plugin.messagePipeline
+
                 val playerMessage = PlainTextComponentSerializer.plainText().serialize(evt.originalMessage())
-                val formattedPlayerMessage = MessageFormatter.formatMessageFromGlobal(Component.text(playerMessage), evt.player.name)
-                evt.viewers().forEach { it.sendMessage(formattedPlayerMessage) }
-                val chat =
-                        """{
+                val formattedPlayerMessage =
+                        MessageFormatter.formatMessageFromPlayer(Component.text(playerMessage), npc)
+
+                evt.player.sendMessage(formattedPlayerMessage)
+
+                val actions = pipeline.run(playerMessage, conversation)
+                if (!conversation.ended) {
+                    withContext(plugin.minecraftDispatcher) {
+                        actions.forEach { it.run() }
+                    }
+                }
+            } catch (e: Exception) {
+                val message = Component.text("Something went wrong while getting ")
+                        .append(npc.entity.name().color(NamedTextColor.AQUA))
+                        .append(Component.text("'s response. Please try again"))
+                        .decorate(TextDecoration.ITALIC)
+
+                evt.player.sendMessage(ChatMessageTemplate.withPluginNamePrefix(message))
+                throw (e)
+            } finally {
+                conversation.pendingResponse = false
+            }
+        } else {
+            val globalConversation = plugin.conversationManager.getGlobalConversation()
+            if (globalConversation != null) {
+                try {
+                    val pipeline = plugin.messagePipeline
+                    val playerMessage = PlainTextComponentSerializer.plainText().serialize(evt.originalMessage())
+                    val formattedPlayerMessage = MessageFormatter.formatMessageFromGlobal(Component.text(playerMessage), evt.player.name)
+                    evt.viewers().forEach { it.sendMessage(formattedPlayerMessage) }
+                    val chat =
+                            """{
                 "message": $playerMessage,
                 "playerInfo": {
                     "name": ${evt.player.name},
                     "itemInHand": ${evt.player.inventory.itemInMainHand.type.name},
                     }"
                  }"""
-                plugin.logger.info("PLAYERS")
-                for (player in globalConversation.players) {
-                    plugin.logger.info("PLAYER: ${player.name}")
-                }
-                plugin.logger.info("NPCS")
-                withContext(plugin.minecraftDispatcher) {
-                    globalConversation.npcs.forEach {
-                        plugin.logger.info("NPC: ${it.name}")
-                        val actions = pipeline.run(chat, globalConversation, it)
-                        if (!globalConversation.npcEnded[it.uniqueId]!!) {
-                            withContext(plugin.minecraftDispatcher) {
-                                actions.forEach { it.run() }
+                    plugin.logger.info("PLAYERS")
+                    for (player in globalConversation.players) {
+                        plugin.logger.info("PLAYER: ${player.name}")
+                    }
+                    plugin.logger.info("NPCS")
+                    withContext(plugin.minecraftDispatcher) {
+                        globalConversation.npcs.forEach {
+                            plugin.logger.info("NPC: ${it.name}")
+                            val actions = pipeline.run(chat, globalConversation, it)
+                            if (!globalConversation.npcEnded[it.uniqueId]!!) {
+                                withContext(plugin.minecraftDispatcher) {
+                                    actions.forEach { it.run() }
+                                }
                             }
                         }
                     }
+
+                } catch (e: Exception) {
+                    val message = Component.text("Something went wrong while getting ")
+                            .append(Component.text("Global").color(NamedTextColor.DARK_GREEN))
+                            .append(Component.text("'s response. Please try again"))
+                            .decorate(TextDecoration.ITALIC)
+
+                    Bukkit.broadcast(ChatMessageTemplate.withPluginNamePrefix(message))
+                    throw (e)
                 }
-
-            } catch (e: Exception) {
-                val message = Component.text("Something went wrong while getting ")
-                        .append(Component.text("Global").color(NamedTextColor.DARK_GREEN))
-                        .append(Component.text("'s response. Please try again"))
-                        .decorate(TextDecoration.ITALIC)
-
-                Bukkit.broadcast(ChatMessageTemplate.withPluginNamePrefix(message))
-                throw (e)
             }
         }
 
