@@ -3,7 +3,6 @@ package tj.horner.villagergpt.conversation.pipeline
 import com.aallam.openai.api.BetaOpenAI
 import com.aallam.openai.api.chat.ChatMessage
 import com.aallam.openai.api.chat.ChatRole
-import net.citizensnpcs.api.npc.NPC
 import tj.horner.villagergpt.conversation.NPCConversation
 import tj.horner.villagergpt.conversation.NPCGlobalConversation
 
@@ -59,25 +58,25 @@ class MessageProcessorPipeline(
     }
 
     @OptIn(BetaOpenAI::class)
-    suspend fun run(playerMessage: String, conversation: NPCGlobalConversation, npc : NPC): Iterable<ConversationMessageAction> {
+    suspend fun run(playerMessage: String, conversation: NPCGlobalConversation): Iterable<ConversationMessageAction> {
         var convo = conversation
 
         convo.addMessage(ChatMessage(
                 role = ChatRole.User,
                 content = playerMessage
-        ), npc)
+        ), conversation.npc)
         val nextMessage: String
         try {
-            nextMessage = producer.produceNextMessage(convo, npc)
+            nextMessage = producer.produceNextMessage(convo)
         } catch(e: Exception) {
-            convo.removeLastMessage(npc.uniqueId)
+            convo.removeLastMessage()
             throw(e)
         }
 
         val actions = mutableListOf<ConversationMessageAction>()
         var transformedMessage = nextMessage
         processors.forEach {
-            val resultActions = it.processMessage(transformedMessage, convo, npc)
+            val resultActions = it.processMessage(transformedMessage, convo)
             if (resultActions != null) actions.addAll(resultActions)
 
             if (it is ConversationMessageTransformer) {
@@ -89,7 +88,7 @@ class MessageProcessorPipeline(
         convo.addMessage(ChatMessage(
                 role = ChatRole.Assistant,
                 content = nextMessage
-        ), npc)
+        ), conversation.npc)
         return actions
     }
 }

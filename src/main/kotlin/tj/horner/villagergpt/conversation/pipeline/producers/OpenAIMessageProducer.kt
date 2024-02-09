@@ -7,7 +7,6 @@ import com.aallam.openai.api.model.ModelId
 import com.aallam.openai.client.LoggingConfig
 import com.aallam.openai.client.OpenAI
 import com.aallam.openai.client.OpenAIConfig
-import net.citizensnpcs.api.npc.NPC
 import org.bukkit.configuration.Configuration
 import tj.horner.villagergpt.conversation.NPCConversation
 import tj.horner.villagergpt.conversation.NPCGlobalConversation
@@ -39,12 +38,12 @@ class OpenAIMessageProducer(config: Configuration) : ConversationMessageProducer
     }
 
     @OptIn(BetaOpenAI::class)
-    override suspend fun produceNextMessage(conversation: NPCGlobalConversation, npc : NPC): String {
+    override suspend fun produceNextMessage(conversation: NPCGlobalConversation): String {
         val request = ChatCompletionRequest(
                 model = model,
-                messages = conversation.npcMessages[npc.uniqueId]!!,
-                temperature = 0.1,
-                user = npc.uniqueId.toString()
+                messages = conversation.messages,
+                temperature = 0.7,
+                user = conversation.npc.uniqueId.toString()
         )
 
 

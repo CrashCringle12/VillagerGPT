@@ -1,14 +1,10 @@
 package tj.horner.npcgpt.conversation
 
-import crashcringle.malmoserverplugin.barterkings.npc.BarterTrait
-import crashcringle.malmoserverplugin.barterkings.players.BarterGame
-import crashcringle.malmoserverplugin.barterkings.players.Participant
 import net.citizensnpcs.api.CitizensAPI
 import net.citizensnpcs.api.npc.NPC
 import org.bukkit.Bukkit
 import org.bukkit.entity.Player
 import org.bukkit.plugin.Plugin
-
 import tj.horner.villagergpt.conversation.NPCConversation
 import tj.horner.villagergpt.conversation.NPCGlobalConversation
 import tj.horner.villagergpt.events.NPCConversationEndEvent
@@ -56,22 +52,20 @@ class NPCConversationManager(private val plugin: Plugin) {
     }
 
     fun startGlobalConversation(): NPCGlobalConversation? {
-        val npcs = mutableListOf<NPC>()
         for (npc in CitizensAPI.getNPCRegistry()) {
             plugin.logger.info("Checking NPC: ${npc.name}")
-            npc.traits.forEach() {
-                if (it.name == "barterplus") {
-                    plugin.logger.info("Found BarterPlus NPC: ${npc.name}")
-                    npcs.add(npc)
-                }
+            if (npc.name == "John") {
+                var globalNPC = npc;
+                plugin.logger.info("Found John")
+                globalConversation = NPCGlobalConversation(plugin, npc,
+                        Bukkit.getOnlinePlayers() as MutableList<Player>
+                )
+                val startEvent = NPCGlobalConversationStartEvent(globalConversation!!)
+                plugin.server.pluginManager.callEvent(startEvent)
+                return globalConversation
             }
         }
-        globalConversation = NPCGlobalConversation(plugin, npcs,
-                Bukkit.getOnlinePlayers() as MutableList<Player>
-        )
-        val startEvent = NPCGlobalConversationStartEvent(globalConversation!!)
-        plugin.server.pluginManager.callEvent(startEvent)
-        return globalConversation
+        return null;
     }
 
     private fun getConversation(player: Player, npc: NPC): NPCConversation {

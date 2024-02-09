@@ -3,7 +3,6 @@ package tj.horner.villagergpt.conversation
 import com.aallam.openai.api.BetaOpenAI
 import com.aallam.openai.api.chat.ChatMessage
 import com.aallam.openai.api.chat.ChatRole
-import crashcringle.malmoserverplugin.barterkings.players.Profession
 import net.citizensnpcs.api.npc.NPC
 import net.kyori.adventure.text.Component
 import org.bukkit.Bukkit
@@ -16,32 +15,45 @@ import tj.horner.villagergpt.events.NPCGlobalConversationMessageEvent
 import tj.horner.villagergpt.events.NPCGlobalConversationResponseEvent
 import java.time.Duration
 import java.util.*
-import kotlin.random.Random
 
 @OptIn(BetaOpenAI::class)
-class NPCGlobalConversation(private val plugin: Plugin, val npcs: MutableList<NPC>, val players: MutableList<Player>) {
-    private var npcLastMessageAt = mutableMapOf<UUID, Date>()
+class NPCGlobalConversation(private val plugin: Plugin, val npc: NPC, val players: MutableList<Player>) {
+    private var lastMessageAt: Date = Date()
     // Create a mapping of NPC to a list of messages
-    val npcMessages = mutableMapOf<UUID, MutableList<ChatMessage>>()
-    var npcPendingResponse = mutableMapOf<UUID, Boolean>()
-    var npcEnded = mutableMapOf<UUID, Boolean>()
+    val messages = mutableListOf<ChatMessage>()
+    var pendingResponse = false;
+    var ended = false
 
     init {
         startGlobalConversation()
-        // Default npcEnded to false
-        for (npc in npcs) {
-            npcEnded[npc.uniqueId] = false
-            npcPendingResponse[npc.uniqueId] = false
-        }
     }
     fun addMessage(message: ChatMessage, npc : NPC) {
-        Bukkit.getScheduler().runTaskAsynchronously(plugin, Runnable {
-            val event = NPCGlobalConversationMessageEvent(this, message)
-            plugin.server.pluginManager.callEvent(event)
-            npcMessages[npc.uniqueId]!!.add(message)
-            npcLastMessageAt[npc.uniqueId] = Date()
-        });
+        val event = NPCGlobalConversationMessageEvent(this, message)
+        plugin.server.pluginManager.callEvent(event)
+
+        messages.add(message)
+        lastMessageAt = Date()
     }
+
+
+    fun removeLastMessage() {
+        if (messages.size == 0) return
+        messages.removeLast()
+    }
+
+    fun reset() {
+        messages.clear()
+        startGlobalConversation()
+        lastMessageAt = Date()
+    }
+
+    fun hasExpired(): Boolean {
+        val now = Date()
+        val difference = now.time - lastMessageAt.time
+        val duration = Duration.ofMillis(difference)
+        return duration.toSeconds() > 120
+    }
+
 
     fun sendResponseToNPCs(message: Component, npc: NPC) {
         // Check if message is an empty string
@@ -75,93 +87,46 @@ class NPCGlobalConversation(private val plugin: Plugin, val npcs: MutableList<NP
             });
     }
 
-    fun addMessageAll(message: ChatMessage) {
-        val event = NPCGlobalConversationMessageEvent(this, message)
-        plugin.server.pluginManager.callEvent(event)
-        for (npc in npcs) {
-            npcMessages[npc.uniqueId]!!.add(message)
-            npcLastMessageAt[npc.uniqueId] = Date()
-        }
-    }
+//    fun addMessageAll(message: ChatMessage) {
+//        val event = NPCGlobalConversationMessageEvent(this, message)
+//        plugin.server.pluginManager.callEvent(event)
+//        for (npc in npcs) {
+//            npcMessages[npc.uniqueId]!!.add(message)
+//            npcLastMessageAt[npc.uniqueId] = Date()
+//        }
+//    }
 
-    fun removeLastMessage(uuid : UUID) {
-        val messages = npcMessages[uuid]
-        if (messages != null) {
-            if (messages.size == 0) return
-            messages.removeLast()
-        }
-    }
 
-    fun reset() {
-        for (npc in npcs) {
-            npcMessages[npc.uniqueId]!!.clear()
-            startGlobalConversation()
-            npcLastMessageAt[npc.uniqueId] = Date()
-        }
-    }
-
-    fun hasExpired(uuid : UUID): Boolean {
-        val now = Date()
-        val lastMessageAt = npcLastMessageAt[uuid]
-        if (lastMessageAt != null) {
-            val difference = now.time - lastMessageAt.time
-            val duration = Duration.ofMillis(difference)
-            return duration.toSeconds() > 120
-        }
-        return false
-    }
-
-    fun hasPlayerLeft(): Boolean {
-        for (player in players) {
-            if (player.location.world != npcs[0].entity.location.world) return true
-            val radius = 20.0 // blocks?
-            val radiusSquared = radius * radius
-            val distanceSquared = player.location.distanceSquared(npcs[0].entity.location)
-            return distanceSquared > radiusSquared
-
-        }
-
-        return false;
-
-    }
+//    fun hasPlayerLeft(): Boolean {
+//        for (player in players) {
+//            if (player.location.world != npcs[0].entity.location.world) return true
+//            val radius = 20.0 // blocks?
+//            val radiusSquared = radius * radius
+//            val distanceSquared = player.location.distanceSquared(npcs[0].entity.location)
+//            return distanceSquared > radiusSquared
+//
+//        }
+//
+//        return false;
+//    }
 
     private fun startGlobalConversation() {
         var messageRole = ChatRole.System
-        var prompts = generateSystemPrompts()
+        var prompt = generateSystemPrompt()
         val preambleMessageType = plugin.config.getString("preamble-message-type") ?: "system"
-        for (npc in npcs) {
-            var prompt = prompts[npc.uniqueId]
-            if (preambleMessageType === "user") {
-                messageRole = ChatRole.User
-                prompt = "[SYSTEM MESSAGE]\n\n$prompt"
-            }
-            npcMessages[npc.uniqueId] = mutableListOf(
+        if (preambleMessageType === "user") {
+            messageRole = ChatRole.User
+            prompt = "[SYSTEM MESSAGE]\n\n$prompt"
+        }
+        messages.add(
                 ChatMessage(
-                    role = messageRole,
-                    content = prompt!!
+                        role = messageRole,
+                        content = prompt
                 )
-            )
-        }
+        )
+
     }
-    private fun generateSystemPrompts(): MutableMap<UUID, String> {
-        val prompts = mutableMapOf<UUID, String>()
-        for (i in 0 until npcs.size) {
-            val npc = npcs[i]
-            val personality = getPersonality(i)
-            val speechStyle = getSpeechStyle(i)
-            // Give a profession randomly, either Farmer, Blacksmith, or Mason
-            var profession = getProfession(i)
-            if (npc.name == "John") {
-                profession = "Farmer"
-            } else {
-                profession = "Blacksmith"
-            }
-            val prompt = generatePrompt(npc, personality, speechStyle, profession)
-            prompts[npc.uniqueId] = prompt
-        }
-        return prompts
-    }
-    private fun generatePrompt(npc : NPC, personality : VillagerPersonality, speechStyle : VillagerSpeechStyle, profession : String): String {
+    private fun generateSystemPrompt(): String {
         val world = npc.entity.location.world
         val weather = if (world.hasStorm()) "Rainy" else "Sunny"
         val biome = world.getBiome(npc.entity.location)
@@ -185,8 +150,8 @@ class NPCGlobalConversation(private val plugin: Plugin, val npcs: MutableList<NP
         if (npcInventory.equals("")) {
             npcInventory = "Nothing"
         }
-        plugin.logger.info("${npc.name} is $personality")
-        plugin.logger.info("${npc.name} uses $speechStyle language")
+        //plugin.logger.info("${npc.name} is $personality")
+        //plugin.logger.info("${npc.name} uses $speechStyle language")
 
         return """
         You are a player in the game Minecraft where you can converse with other players and come up with new trades based on your conversation.
@@ -251,81 +216,12 @@ class NPCGlobalConversation(private val plugin: Plugin, val npcs: MutableList<NP
         - You do not need to respond to every message, but you should always respond to messages that address you by name.
         - Listen to the chat and try to make trades to gain as many items as possible related to your profession.
         - If you do not wish to respond to a message, reply with ACTION:PASS.
-       
-       CHATFORMAT:
-       - You receive messages in the following format similar to this example:
-         CHAT = {
-              "message": Anyone got wool?,
-              "playerInfo": {
-                    "name": CrashCringle12,
-                    "itemInHand": DIAMOND_SWORD,
-              }   
-         }
-         Where CHAT.message is the message sent by the player
-         CHAT.playerInfo.name is the player's name
-         CHAT.playerInfo.itemInHand is the item the player is holding
-         You do not need to respond in this format, just write your message.
+     
        
         Personality:
         - Your Name: ${npc.name}
-        - Your Profession: ${profession}
+        - Your Profession: Farmer
         Speaking verbose is suspicious and will make the player think you are a bot. 
         """.trimIndent()
     }
-
-    private fun getPersonality(i : Int): VillagerPersonality {
-        val personalities = VillagerPersonality.values()
-        val rnd = Random(npcs[i].uniqueId.mostSignificantBits)
-        return personalities[rnd.nextInt(0, personalities.size)]
-    }
-
-    private fun getSpeechStyle(i : Int): VillagerSpeechStyle {
-        val styles = VillagerSpeechStyle.values()
-        val rnd = Random(npcs[i].uniqueId.mostSignificantBits)
-        return styles[rnd.nextInt(0, styles.size)]
-    }
-
-//    private fun getProfession(i : Int): String {
-//        // Create a list of professions
-//        val professions = mutableListOf<String>()
-//        professions.add("Farmer")
-//        professions.add("Blacksmith")
-//        professions.add("Mason")
-//        professions.add("Fisherman")
-//        // Get a random profession from the list
-//        val rnd = Random(npcs[i].name.hashCode())
-//        return professions[rnd.nextInt(0, professions.size)]
-//    }
-
-    fun getProfession(i : Int): String {
-        val rnd = Random(npcs[i].name.hashCode())
-        val random = rnd.nextInt(0, 3)
-        return when (random) {
-            0 -> "Farmer"
-            1 -> "Fisherman"
-            2 -> "Butcher"
-            3 -> "Blacksmith"
-//            4 -> "Leatherworker"
-//            5 -> "Mason"
-//            6 -> "Shepherd"
-//            7 -> "Lumberjack"
-            else -> "Farmer"
-        }
-    }
-
-//    private fun getPlayerClothing(): String {
-//        val clothing = mutableListOf<String>()
-//        val helmet = player.inventory.helmet
-//        val chestplate = player.inventory.chestplate
-//        val leggings = player.inventory.leggings
-//        val boots = player.inventory.boots
-//
-//        if (helmet != null) clothing.add(helmet.type.name)
-//        if (chestplate != null) clothing.add(chestplate.type.name)
-//        if (leggings != null) clothing.add(leggings.type.name)
-//        if (boots != null) clothing.add(boots.type.name)
-//
-//        return clothing.joinToString(", ")
-//    }
-
 }
