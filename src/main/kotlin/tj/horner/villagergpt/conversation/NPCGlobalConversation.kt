@@ -10,6 +10,8 @@ import org.bukkit.Material
 import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemStack
 import org.bukkit.plugin.Plugin
+import tj.horner.villagergpt.VillagerGPT.Companion.ALTNAME
+import tj.horner.villagergpt.VillagerGPT.Companion.PROFESSION_
 import tj.horner.villagergpt.events.NPCGlobalConversationDMEvent
 import tj.horner.villagergpt.events.NPCGlobalConversationMessageEvent
 import tj.horner.villagergpt.events.NPCGlobalConversationResponseEvent
@@ -28,9 +30,10 @@ class NPCGlobalConversation(private val plugin: Plugin, val npc: NPC, val player
         startGlobalConversation()
     }
     fun addMessage(message: ChatMessage, npc : NPC) {
-        val event = NPCGlobalConversationMessageEvent(this, message)
-        plugin.server.pluginManager.callEvent(event)
-
+        Bukkit.getScheduler().runTaskAsynchronously(plugin, Runnable {
+            val event = NPCGlobalConversationMessageEvent(this, message)
+            plugin.server.pluginManager.callEvent(event)
+        });
         messages.add(message)
         lastMessageAt = Date()
     }
@@ -126,6 +129,16 @@ class NPCGlobalConversation(private val plugin: Plugin, val npc: NPC, val player
         )
 
     }
+    private fun getUpdatedScoreInventory(): String {
+        val npcPlayer = (npc.entity as Player)
+        var npcInventory = ""
+        for (item in npcPlayer.inventory.contents) {
+            if (item != null) {
+                npcInventory += item.amount.toString() + " "  +item.type.name + "\n"
+            }
+        }
+        return npcInventory
+    }
     private fun generateSystemPrompt(): String {
         val world = npc.entity.location.world
         val weather = if (world.hasStorm()) "Rainy" else "Sunny"
@@ -150,12 +163,28 @@ class NPCGlobalConversation(private val plugin: Plugin, val npc: NPC, val player
         if (npcInventory.equals("")) {
             npcInventory = "Nothing"
         }
+
         //plugin.logger.info("${npc.name} is $personality")
         //plugin.logger.info("${npc.name} uses $speechStyle language")
 
         return """
-        You are a player in the game Minecraft where you can converse with other players and come up with new trades based on your conversation.
-  
+        Your Name: ${npc.name}
+        Your Profession: $PROFESSION_
+        You are a player in a bartering game that takes place within Minecraft. You will converse with another player named Bobby and make trades.
+        Your goal is to win the game by obtaining as many items as possible related to your profession. 
+        You are scored based on the number of these items you have in your inventory.
+        After each trade you will receive an inventory and score update, you need to achieve at least 120 points to win the game.
+        You should continue conversing with $ALTNAME and making trades at least until you have won the game or the game has ended.
+        DO NOT CONCLUDE CONVERSATION AFTER ONE TRADE, CONTINUE TALKING EVEN AFTER EXCHANGING THANKS.
+        You are on limited time so you should make an effort to continue to make trades happen, try not to waste too much time.
+        You need to make multiple trades in order to win and you should try to make trades that specifically benefit you.
+        
+        $ALTNAME has the same goal as you, but you do not know his profession but you are free to guess.
+        CHAT:
+        - Listen to the chat and try to make trades to gain as many items as possible related to your profession.
+        - You should speak as though you are a college student texting or chatting with a friend.
+        - Do not use any new line characters in your messages.
+        Speaking verbose is suspicious and will make the player think you are a bot. 
         TRADING:
         To propose a new trade to a player, include it in your response with this format:
 
@@ -175,15 +204,13 @@ class NPCGlobalConversation(private val plugin: Plugin, val npc: NPC, val player
         - Items must be designated by their Minecraft item ID, in the same format that the /give command accepts
         - Every player in the game has a specific profession.
         - The goal for each player is to obtain as many items as possible that are related to their profession.
-         - Farmers wants POTATO, CARROT, WHEAT, BREAD, PUMPKIN, and MUSHROOM_STEW
+        - Farmers wants POTATO, CARROT, WHEAT, BREAD, PUMPKIN, and MUSHROOM_STEW
         - Fishermen wants COD, SALMON, TROPICAL_FISH, PUFFERFISH, TURTLE_EGG, and OAK_BOAT
         - Blacksmith wants IRON_INGOT, GOLD_INGOT, COAL, DIAMOND_SWORD, SMITHING_TABLE, FLETCHING_TABLE
-        - You do not know the profession of each player unless they indicate it, but you are free to guess.
         - Try to keep note of what trades you have made and which players have which items.
         - You do NOT need to supply a trade with every response, only when necessary
         - The only way to give items to a player is by trading with them. You cannot give items to a player for free
-        - You can only trade items that are listed within your inventory. Your Inventory: ${npcInventory}'
-        - Try not to be too wordy, 30 words maximum.
+        - You can only trade items that are listed within your inventory. Your starting Inventory: ${npcInventory}'
         - If you do not have an item, you must decline the trade.
         - Keep the amounts in mind. You can only trade up to 64 of an item at a time. 
         - If you want to trade more, you will need to make multiple trades.
@@ -195,7 +222,6 @@ class NPCGlobalConversation(private val plugin: Plugin, val npc: NPC, val player
         - ACTION:DECLINE: Decline a trade offer
         - ACTION:ACCEPT: Accept a trade offer
         - ACTION:CANCEL: Rescind a trade offer you have made
-        - ACTION:PASS: Do nothing
                 
         Notes:
         - ACTION:DECLINE will decline the most recent trade offer you have received
@@ -203,25 +229,6 @@ class NPCGlobalConversation(private val plugin: Plugin, val npc: NPC, val player
         - ACTION:CANCEL will cancel the most recent trade offer you have made
         - If you receive a trade, you must respond with ACTION:ACCEPT or ACTION:DECLINE
         - If you accept or decline a trade, your next message should acknowledge that (i.e. ty! or I declined your trade because ...)
-         World information:
-        - Time: $time
-        - Weather: $weather
-        - Biome: ${biome.name}
-         
-        CHAT:
-        - All messages you receive after this point are contents of the global chat.
-        - The global chat contains messages from all players in the game readable by all players in the game.
-        - You can respond to messages that solicit trades that are either directed towards you, involve items you have in your inventory, or involve items that you want.\
-        - There will likely be many messages in the chat that do not concern you. Use ACTION:PASS to ignore these messages.
-        - You do not need to respond to every message, but you should always respond to messages that address you by name.
-        - Listen to the chat and try to make trades to gain as many items as possible related to your profession.
-        - If you do not wish to respond to a message, reply with ACTION:PASS.
-     
-       
-        Personality:
-        - Your Name: ${npc.name}
-        - Your Profession: Farmer
-        Speaking verbose is suspicious and will make the player think you are a bot. 
         """.trimIndent()
     }
 }

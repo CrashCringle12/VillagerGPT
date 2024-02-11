@@ -3,14 +3,15 @@ package tj.horner.villagergpt.conversation.formatting
 import net.citizensnpcs.api.npc.NPC
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
+import org.bukkit.ChatColor
 
 object MessageFormatter {
     fun formatMessageFromPlayer(message: Component, npc: NPC): Component {
         return formatMessage(message, playerComponent(), npcComponent(npc))
     }
 
-    fun formatMessageFromGlobal(message: Component, name : String ): Component {
-        return formatMessage(message, playerGlobalComponent(name), globalComponent() )
+    fun formatMessageFromGlobal(message: String, name : String ): String {
+        return formatMessage(message, name)
     }
 
     fun formatMessageFromNPC(message: Component, npc: NPC): Component {
@@ -29,6 +30,12 @@ object MessageFormatter {
             .append(message)
             .build()
     }
+
+    private fun formatMessage(message: String, sender: String): String {
+        val formattedMessage = "" + sender + ChatColor.WHITE + " → " + message
+        return formattedMessage
+    }
+
 
     private fun playerComponent(): Component {
         return Component.text("You").color(NamedTextColor.DARK_AQUA)

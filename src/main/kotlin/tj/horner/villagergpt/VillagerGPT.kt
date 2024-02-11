@@ -18,7 +18,6 @@ import java.util.logging.Level
 
 class VillagerGPT : SuspendingJavaPlugin() {
     val conversationManager = NPCConversationManager(this)
-
     val messagePipeline = MessageProcessorPipeline(
         OpenAIMessageProducer(config),
         listOf(
@@ -46,9 +45,9 @@ class VillagerGPT : SuspendingJavaPlugin() {
     }
 
     private fun setCommandExecutors() {
-        getCommand("ttv")!!.setSuspendingExecutor(TalkCommand(this))
-        getCommand("ttvclear")!!.setSuspendingExecutor(ClearCommand(this))
-        getCommand("ttvend")!!.setSuspendingExecutor(EndCommand(this))
+        getCommand("ttv-"+PLNAME.lowercase())!!.setSuspendingExecutor(TalkCommand(this))
+        getCommand("ttvclear-"+PLNAME.lowercase())!!.setSuspendingExecutor(ClearCommand(this))
+        getCommand("ttvend-"+PLNAME.lowercase())!!.setSuspendingExecutor(EndCommand(this))
     }
 
     private fun registerEvents() {
@@ -62,5 +61,11 @@ class VillagerGPT : SuspendingJavaPlugin() {
     private fun validateConfig(): Boolean {
         val openAiKey = config.getString("openai-key") ?: return false
         return openAiKey.trim() != ""
+    }
+
+    companion object {
+        const val PLNAME = "BOBBY"
+        const val ALTNAME = "JOHN"
+        const val PROFESSION_ = "Blacksmith"
     }
 }

@@ -1,16 +1,16 @@
-name: VillagerGPT
+name: VillagerGPT-Bobby
 version: '${version}'
 main: tj.horner.villagergpt.VillagerGPT
 api-version: 1.19
 depend:
   - MalmoServerPlugin
 commands:
-  ttv:
+  ttv-bobby:
     description: Start a conversation with a villager
-    permission: villagergpt.ttv
-  ttvclear:
+    permission: villagergpt2.ttv
+  ttvclear-bobby:
     description: Clear your conversation with a villager
-    permission: villagergpt.ttvclear
-  ttvend:
+    permission: villagergpt2.ttvclear
+  ttvend-bobby:
     description: End the current villager conversation
-    permission: villagergpt.ttvend
+    permission: villagergpt2.ttvend

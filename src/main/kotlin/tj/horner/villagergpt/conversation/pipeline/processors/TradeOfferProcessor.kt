@@ -23,6 +23,7 @@ import java.util.logging.Logger
 import crashcringle.malmoserverplugin.barterkings.trades.TradeController;
 import crashcringle.malmoserverplugin.barterkings.trades.TradeRequest
 import net.citizensnpcs.api.npc.NPC
+import org.bukkit.ChatColor
 import org.bukkit.entity.Player
 import org.hibernate.internal.util.collections.CollectionHelper.listOf
 import tj.horner.villagergpt.conversation.NPCGlobalConversation
@@ -49,11 +50,11 @@ class TradeOfferProcessor(private val logger: Logger) : ConversationMessageProce
                     val trade = parseNPCTradeResponse(response, conversation.npc)
                     trades.add(trade)
 
-                    val tradeMessage = chatFormattedRecipe(trade)
-                    messageComponent.append(tradeMessage)
+                    val tradeMessage = chatFormattedRecipeStr(trade)
+                    messageComponent.append(Component.text(tradeMessage))
                 } catch(e: Exception) {
                     logger.log(Level.WARNING, "Chat response contained invalid trade: $response", e)
-                    messageComponent.append(invalidTradeComponent(response))
+                    messageComponent.append(Component.text(invalidTradeComponent(response)))
                 }
             } else {
                 messageComponent.append(Component.text(it).color(NamedTextColor.WHITE))
@@ -67,38 +68,39 @@ class TradeOfferProcessor(private val logger: Logger) : ConversationMessageProce
         )
     }
 
-    override fun processMessage(message: String, conversation: NPCGlobalConversation, npc : NPC): Collection<ConversationMessageAction> {
+    override fun processMessage(message: String, conversation: NPCGlobalConversation): Collection<ConversationMessageAction> {
         val tradeExpressionRegex = Regex("TRADE(\\[.+?\\])ENDTRADE")
         val splitMessage = splitWithMatches(message, tradeExpressionRegex)
-
+        var message1 = message.trim()
         val trades = mutableListOf<Trade>()
 
-        val messageComponent = Component.text().content("")
+        var messageComponent = message
 
         splitMessage.forEach {
             if (it.trim().startsWith("TRADE")) {
                 val response = it.trim().replace(Regex("(^TRADE)|(ENDTRADE$)"), "")
 
                 try {
-                    val trade = parseNPCTradeResponse(response, npc)
+                    val trade = parseNPCTradeResponse(response, conversation.npc)
                     trades.add(trade)
 
-                    val tradeMessage = chatFormattedRecipe(trade)
-                    messageComponent.append(tradeMessage)
+                    val tradeMessage = conversation.npc.name + " " + chatFormattedRecipeStr(trade)
+                    message1 = tradeMessage.trim()
+                    messageComponent = "$messageComponent | $message1"
+
                 } catch(e: Exception) {
                     logger.log(Level.WARNING, "Chat response contained invalid trade: $response", e)
-                    messageComponent.append(invalidTradeComponent(response))
+                    messageComponent = messageComponent + " " + invalidTradeComponent(response)
                 }
             } else {
-                messageComponent.append(Component.text(it).color(NamedTextColor.WHITE))
+                messageComponent = messageComponent + " " //+ ChatColor.WHITE
             }
         }
 
-        val formattedMessage = MessageFormatter.formatMessageFromGlobal(messageComponent.build(), npc.name)
+        val formattedMessage = MessageFormatter.formatMessageFromGlobal(messageComponent, conversation.npc.name)
         return listOf(
-                SetTradesAction(npc, trades),
-                SendGlobalMessageAction(formattedMessage),
-                SendNPCMessageAction(npc, conversation, formattedMessage)
+                SetTradesAction(conversation.npc, trades),
+                SendGlobalMessageAction(conversation, messageComponent, logger)
         )
     }
 
@@ -149,41 +151,35 @@ class TradeOfferProcessor(private val logger: Logger) : ConversationMessageProce
     }
 
 
-    private fun chatFormattedRecipe(trade: Trade): TextComponent {
-        val component = Component.text().content("is offering ")
+    private fun chatFormattedRecipeStr(trade: Trade): String {
+        var message = "is offering "
 
         trade.offeredItems.forEachIndexed { index, it ->
-            component.append(Component.text("${it.amount} ").color(NamedTextColor.LIGHT_PURPLE))
-            component.append(it.displayName())
+            message += "${it.amount} " + it.type.name
 
             if (index + 1 < trade.offeredItems.count())
-                component.append(Component.text(" + "))
+                message += " + "
             else
-                component.append(Component.text(" "))
+                message += " "
         }
 
-        component.append(Component.text("in exchange for "))
+        message += "in exchange for "
         trade.requestedItems.forEachIndexed { index, it ->
-            component.append(Component.text("${it.amount} ").color(NamedTextColor.LIGHT_PURPLE))
-            component.append(it.displayName())
+            message += "${it.amount} " + it.type.name
 
             if (index + 1 < trade.requestedItems.count())
-                component.append(Component.text(" + "))
+                message += " + "
             else
-                component.append(Component.text(" "))
+                message += " "
         }
-        component.append(Component.text(". Use an ACTION to accept or decline."))
-        component.color(NamedTextColor.DARK_GREEN)
+        message += ". Use an ACTION to accept or decline."
 
-        return component.build()
+        return message
     }
 
-    private fun invalidTradeComponent(rawTrade: String): Component {
-        return Component.text()
-            .content("[Invalid Trade]")
-            .hoverEvent(HoverEvent.showText(Component.text("The response contained a recipe for an invalid trade. Here is the attempted recipe:\n\n$rawTrade")))
-            .color(NamedTextColor.RED)
-            .build()
+
+    private fun invalidTradeComponent(rawTrade: String): String {
+        return "[INVALID TRADE] The response contained a recipe for an invalid trade. Here is the attempted recipe: $rawTrade"
     }
 
     private fun splitWithMatches(input: String, regex: Regex): List<String> {

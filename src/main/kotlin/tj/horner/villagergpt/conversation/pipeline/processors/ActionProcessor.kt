@@ -26,10 +26,10 @@ class ActionProcessor(private val plugin: VillagerGPT)  : ConversationMessagePro
 
     override fun processMessage(
             message: String,
-            conversation: NPCGlobalConversation, npc : NPC
+            conversation: NPCGlobalConversation
     ): Collection<ConversationMessageAction> {
         val parsedActions = getActions(message)
-        return parsedActions.mapNotNull { textToAction(it, conversation, npc) }
+        return parsedActions.mapNotNull { textToAction(it, conversation) }
     }
 
     override fun transformMessage(message: String, conversation: NPCConversation): String {
@@ -47,7 +47,7 @@ class ActionProcessor(private val plugin: VillagerGPT)  : ConversationMessagePro
 
     private fun textToAction(text: String, conversation: NPCConversation): ConversationMessageAction? {
         return when (text) {
-//            "SHAKE_HEAD" -> ShakeHeadAction(conversation.npc.entity)
+//          "SHAKE_HEAD" -> ShakeHeadAction(conversation.npc.entity)
             "SOUND_YES" -> PlaySoundAction(conversation.player, conversation.npc.entity, villagerSound("entity.villager.yes"))
             "SOUND_NO" -> PlaySoundAction(conversation.player, conversation.npc.entity, villagerSound("entity.villager.no"))
             "SOUND_AMBIENT" -> PlaySoundAction(conversation.player, conversation.npc.entity, villagerSound("entity.villager.ambient"))
@@ -57,12 +57,12 @@ class ActionProcessor(private val plugin: VillagerGPT)  : ConversationMessagePro
         }
     }
 
-    private fun textToAction(text: String, conversation: NPCGlobalConversation, npc : NPC): ConversationMessageAction? {
+    private fun textToAction(text: String, conversation: NPCGlobalConversation): ConversationMessageAction? {
         plugin.logger.info("Action: $text")
         return when (text) {
-            "DECLINE" -> PerformTradeAction(npc, conversation,"decline")
-            "ACCEPT" -> PerformTradeAction(npc, conversation, "accept")
-            "CANCEL" -> PerformTradeAction(npc, conversation, "cancel")
+            "DECLINE" -> PerformTradeAction(conversation,"decline")
+            "ACCEPT" -> PerformTradeAction(conversation, "accept")
+            "CANCEL" -> PerformTradeAction(conversation, "cancel")
             "DM" -> Bukkit.getPlayer("CrashCringle12")?.let { SendPlayerMessageAction(it, Component.text(text)) }
             else -> null
         }

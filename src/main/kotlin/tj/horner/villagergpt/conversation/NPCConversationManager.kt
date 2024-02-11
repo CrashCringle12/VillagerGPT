@@ -5,6 +5,8 @@ import net.citizensnpcs.api.npc.NPC
 import org.bukkit.Bukkit
 import org.bukkit.entity.Player
 import org.bukkit.plugin.Plugin
+import tj.horner.villagergpt.VillagerGPT
+import tj.horner.villagergpt.VillagerGPT.Companion.PLNAME
 import tj.horner.villagergpt.conversation.NPCConversation
 import tj.horner.villagergpt.conversation.NPCGlobalConversation
 import tj.horner.villagergpt.events.NPCConversationEndEvent
@@ -52,20 +54,23 @@ class NPCConversationManager(private val plugin: Plugin) {
     }
 
     fun startGlobalConversation(): NPCGlobalConversation? {
+        var globalNPC: NPC?
         for (npc in CitizensAPI.getNPCRegistry()) {
             plugin.logger.info("Checking NPC: ${npc.name}")
-            if (npc.name == "John") {
-                var globalNPC = npc;
-                plugin.logger.info("Found John")
-                globalConversation = NPCGlobalConversation(plugin, npc,
+            if (npc.name.uppercase() == PLNAME.uppercase()) {
+                globalNPC = npc;
+                plugin.logger.info("Found ${VillagerGPT.PLNAME}")
+                globalConversation = NPCGlobalConversation(plugin,globalNPC,
                         Bukkit.getOnlinePlayers() as MutableList<Player>
                 )
-                val startEvent = NPCGlobalConversationStartEvent(globalConversation!!)
-                plugin.server.pluginManager.callEvent(startEvent)
-                return globalConversation
+                if (PLNAME == "JOHN") {
+                    (globalNPC.entity as Player).chat("Hey, I'm looking to trade some items!")
+                }
             }
         }
-        return null;
+        val startEvent = NPCGlobalConversationStartEvent(globalConversation!!)
+        plugin.server.pluginManager.callEvent(startEvent)
+        return globalConversation
     }
 
     private fun getConversation(player: Player, npc: NPC): NPCConversation {

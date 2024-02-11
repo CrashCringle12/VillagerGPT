@@ -60,11 +60,19 @@ class MessageProcessorPipeline(
     @OptIn(BetaOpenAI::class)
     suspend fun run(playerMessage: String, conversation: NPCGlobalConversation): Iterable<ConversationMessageAction> {
         var convo = conversation
+        // Check if message contains [SYSTEM] tag
+        if (playerMessage.contains("[SYSTEM]")) {
+            convo.addMessage(ChatMessage(
+                    role = ChatRole.System,
+                    content = playerMessage
+            ), conversation.npc)
+        } else {
+            convo.addMessage(ChatMessage(
+                    role = ChatRole.User,
+                    content = playerMessage
+            ), conversation.npc)
+        }
 
-        convo.addMessage(ChatMessage(
-                role = ChatRole.User,
-                content = playerMessage
-        ), conversation.npc)
         val nextMessage: String
         try {
             nextMessage = producer.produceNextMessage(convo)
