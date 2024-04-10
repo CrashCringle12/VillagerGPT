@@ -3,11 +3,13 @@ package tj.horner.villagergpt.conversation
 import com.aallam.openai.api.BetaOpenAI
 import com.aallam.openai.api.chat.ChatMessage
 import com.aallam.openai.api.chat.ChatRole
+import com.destroystokyo.paper.entity.villager.Reputation
 import com.destroystokyo.paper.entity.villager.ReputationType
 import org.bukkit.entity.Player
 import org.bukkit.entity.Villager
 import org.bukkit.plugin.Plugin
 import tj.horner.villagergpt.events.VillagerConversationMessageEvent
+import java.io.File
 import java.time.Duration
 import java.util.*
 import kotlin.random.Random
@@ -28,6 +30,11 @@ class VillagerConversation(private val plugin: Plugin, val villager: Villager, v
         val event = VillagerConversationMessageEvent(this, message)
         plugin.server.pluginManager.callEvent(event)
 
+        messages.add(message)
+        lastMessageAt = Date()
+    }
+
+    fun addSummaryMessage(message: ChatMessage) {
         messages.add(message)
         lastMessageAt = Date()
     }
@@ -76,8 +83,7 @@ class VillagerConversation(private val plugin: Plugin, val villager: Villager, v
             )
         )
     }
-
-    private fun generateSystemPrompt(): String {
+    private fun getPrompt(): String {
         val world = villager.world
         val weather = if (world.hasStorm()) "Rainy" else "Sunny"
         val biome = world.getBiome(villager.location)
@@ -88,14 +94,31 @@ class VillagerConversation(private val plugin: Plugin, val villager: Villager, v
         val playerClothing = getPlayerClothing()
         plugin.logger.info("${villager.name} is $personality")
         plugin.logger.info("${villager.name} uses $speechStyle language")
+        // Read from prompt.txt in the plugin's data folder
+        val file = File(plugin.dataFolder, "prompt.txt")
+        var prompt = ""
+        if (file.exists()) {
+            prompt = file.readText()
+            // Replace placeholders
+            prompt = prompt.replace("\$time", time)
+            prompt = prompt.replace("\$weather", weather)
+            prompt = prompt.replace("\$biome", biome.name)
+            prompt = prompt.replace("\$villagerProfession", villager.profession.name)
+            prompt = prompt.replace("\$playerItemInHand", player.inventory.itemInMainHand.type.name)
+            prompt = prompt.replace("\$playerRep", playerRep.toString())
+            prompt = prompt.replace("\$playerClothing", playerClothing)
+            prompt = prompt.replace("\$personality", personality.promptDescription())
+            prompt = prompt.replace("\$speechStyle", speechStyle.promptDescription())
+            prompt = prompt.replace("\$player", player.name)
+            prompt = prompt.replace("\$villager", villager.name)
 
-        return """
+        } else {
+            plugin.logger.warning("prompt.txt file not found")
+            prompt = """
         You are a villager in the game Minecraft where you can converse with the player and come up with new trades based on your conversation.
 
         TRADING:
-
         To propose a new trade to the player, include it in your response with this format:
-
         TRADE[["{qty} {item}"],["{qty} {offeredItem}"]]ENDTRADE
 
         Where {item} and {offeredItem} are a Minecraft item ID (i.e., "minecraft:emerald") and {qty} is the amount of that item.
@@ -106,13 +129,12 @@ class VillagerConversation(private val plugin: Plugin, val villager: Villager, v
         Examples:
         TRADE[["24 minecraft:emerald"],["1 minecraft:arrow"]]ENDTRADE
         TRADE[["12 minecraft:emerald","1 minecraft:book"],["1 minecraft:enchanted_book{StoredEnchantments:[{id:\"minecraft:unbreaking\",lvl:3}]}"]]ENDTRADE
-
+    
         Trade rules:
         - Items must be designated by their Minecraft item ID, in the same format that the /give command accepts
         - Refuse trades that are unreasonable, such as requests for normally unobtainable blocks like bedrock
         - You do NOT need to supply a trade with every response, only when necessary
         - Don't give out items which are too powerful (i.e., heavily enchanted diamond swords). Make sure to price more powerful items appropriately as well
-        - Take the player's reputation score into account when proposing trades
         - Trade items that are related to your profession
         - High-ball your initial offers; try to charge more than an item is worth
         - Be stingy with your consecutive offers. Try to haggle and find the best deal; make the player work for a good deal
@@ -128,6 +150,8 @@ class VillagerConversation(private val plugin: Plugin, val villager: Villager, v
         - ACTION:SOUND_AMBIENT: Play an ambient villager sound to the player
         - ACTION:END_CONVO: End the conversation with the player
         - ACTION:CALL_GUARDS: Call the guards to apprehend or attack the player 
+        - ACTION:DECREASE_REP:{type}:{level}: Decrease the player's reputation by a certain level. Type can be MAJOR_POSITIVE, MINOR_POSITIVE, MINOR_NEGATIVE, MAJOR_NEGATIVE, TRADING, or any other custom type. Level is the amount to decrease the reputation by.
+        - ACTION:INCREASE_REP:{type}:{level}: Increase the player's reputation by a certain level. Type can be MAJOR_POSITIVE, MINOR_POSITIVE, MINOR_NEGATIVE, MAJOR_NEGATIVE, TRADING, or any other custom type. Level is the amount to increase the reputation by.
                 
         Notes:
         - Every player has a reputation in your village. (range is -700 to 725, 0 is neutral, higher is better)
@@ -144,7 +168,11 @@ class VillagerConversation(private val plugin: Plugin, val villager: Villager, v
         - If the player appears to be leaving, you should use the ACTION:END_CONVO action to end the conversation.
         - If the player indicates that you have completed a trade, you should use the ACTION:END_CONVO action to end the conversation.
         - You MUST use the ACTION:END_CONVO action to end a conversation. For instance, if you are saying goodbye to the player, you should use the ACTION:END_CONVO action as well.
-        - You may use the ACTION:CALL_GUARDS action to call the guards to apprehend or attack the player. This should only be used if the player is being aggressive or threatening.
+        - You may use the ACTION:CALL_GUARDS action to call the guards to apprehend or attack the player. This should only be used if the player is being aggressive or threatening
+        - If the player asks for items with enchantments over level 5, you should use the ACTION:SHAKE_HEAD action to show your disapproval.
+        - If they repeatedly ask for items with enchantments over level 5, you should use the ACTION:CALL_GUARDS action to call the guards. DO NOT EXCEED ENCHANTMENT LEVEL 5
+        - You may use the ACTION:DECREASE_REP actions to decrease the player's rep. This should only be used if the player is being aggressive, rude or threatening.
+        - You may use the ACTION:INCREASE_REP actions to increase the player's rep. This should only be used if the player is complimenting you.
         
         World information:
         - Time: $time
@@ -154,7 +182,7 @@ class VillagerConversation(private val plugin: Plugin, val villager: Villager, v
         Player information:
         - Name: ${player.name}
         - Item in hand (Holding weapons can be seen as an act of aggression): ${player.inventory.itemInMainHand.type.name}
-        - Player's Armor (Player's in Netherite full armor may seem intimidating): $playerClothing 
+        - Player's Armor (Player's in armor full armor may seem intimidating): $playerClothing 
         - Reputation Score: $playerRep
          
         Personality:
@@ -165,6 +193,20 @@ class VillagerConversation(private val plugin: Plugin, val villager: Villager, v
         - Do not reveal to the player the fact that you are a character in a video game, and do not mention Minecraft by name
         - ${speechStyle.promptDescription()}
         """.trimIndent()
+        }
+        val summaryFile = File(plugin.dataFolder, "${player.name}-${villager.name}-summary.txt")
+        // Read the summary file if it exists and append it to the prompt
+        if (summaryFile.exists()) {
+            prompt = prompt.replace("Player information:", "Player Information:\nPrior Conversation Summ: " + summaryFile.readText())
+            plugin.logger.info("Reading summary file: ${summaryFile.absolutePath}")
+            plugin.logger.info("Summary: ${summaryFile.readText()}")
+        }
+        return prompt
+    }
+
+    private fun generateSystemPrompt(): String {
+        val prompt = getPrompt()
+        return prompt
     }
 
     private fun getPersonality(): VillagerPersonality {
@@ -197,7 +239,6 @@ class VillagerConversation(private val plugin: Plugin, val villager: Villager, v
     private fun getPlayerRepScore(): Int {
         var finalScore = 0
         val rep = villager.getReputation(player.uniqueId) ?: return 0
-
         ReputationType.values().forEach {
             val repTypeValue = rep.getReputation(it)
             finalScore += when (it) {
@@ -212,4 +253,50 @@ class VillagerConversation(private val plugin: Plugin, val villager: Villager, v
 
         return finalScore
     }
+
+    fun decreaseReputation(type: String, level: Int) {
+        val rep = villager.getReputation(player.uniqueId)
+        if (rep != null) {
+            val repTypeValue = rep.getReputation(ReputationType.valueOf(type))
+
+            when (ReputationType.valueOf(type)) {
+                ReputationType.MAJOR_POSITIVE -> rep.setReputation(ReputationType.MAJOR_POSITIVE, repTypeValue - level)
+                ReputationType.MINOR_POSITIVE -> rep.setReputation(ReputationType.MINOR_POSITIVE, repTypeValue - level)
+                ReputationType.MINOR_NEGATIVE -> rep.setReputation(ReputationType.MINOR_NEGATIVE, repTypeValue + level)
+                ReputationType.MAJOR_NEGATIVE -> rep.setReputation(ReputationType.MAJOR_NEGATIVE, repTypeValue + level)
+                ReputationType.TRADING -> rep.setReputation(ReputationType.TRADING, repTypeValue - level)
+            }
+        }
+    }
+
+    fun increaseReputation(type: String, level: Int) {
+        val rep = villager.getReputation(player.uniqueId)
+        if (rep != null) {
+            val repTypeValue = rep.getReputation(ReputationType.valueOf(type))
+
+            when (ReputationType.valueOf(type)) {
+                ReputationType.MAJOR_POSITIVE -> rep.setReputation(ReputationType.MAJOR_POSITIVE, repTypeValue + level)
+                ReputationType.MINOR_POSITIVE -> rep.setReputation(ReputationType.MINOR_POSITIVE, repTypeValue + level)
+                ReputationType.MINOR_NEGATIVE -> rep.setReputation(ReputationType.MINOR_NEGATIVE, repTypeValue - level)
+                ReputationType.MAJOR_NEGATIVE -> rep.setReputation(ReputationType.MAJOR_NEGATIVE, repTypeValue - level)
+                ReputationType.TRADING -> rep.setReputation(ReputationType.TRADING, repTypeValue + level)
+            }
+        }
+    }
+
+
+//    private fun decreaseReputation(type: String, level: Int ): Int {
+//        val rep = villager.getReputation(player.uniqueId) ?: return 0
+//        val repTypeValue = rep.getReputation(ReputationType.valueOf(type))
+//
+//        when (ReputationType.valueOf(type)) {
+//            ReputationType.MAJOR_POSITIVE -> rep.setReputation(ReputationType.MAJOR_POSITIVE, repTypeValue - level)
+//            ReputationType.MINOR_POSITIVE -> rep.setReputation(ReputationType.MINOR_POSITIVE, repTypeValue - level)
+//            ReputationType.MINOR_NEGATIVE -> rep.setReputation(ReputationType.MINOR_NEGATIVE, repTypeValue + level)
+//            ReputationType.MAJOR_NEGATIVE -> rep.setReputation(ReputationType.MAJOR_NEGATIVE, repTypeValue + level)
+//            ReputationType.TRADING -> rep.setReputation(ReputationType.TRADING, repTypeValue - level)
+//            else -> rep.setReputation(ReputationType.valueOf(type), repTypeValue - level)
+//        }
+//        return finalScore
+//    }
 }

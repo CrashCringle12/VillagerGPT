@@ -5,6 +5,7 @@ import org.bukkit.entity.Villager
 import org.bukkit.plugin.Plugin
 import tj.horner.villagergpt.events.VillagerConversationEndEvent
 import tj.horner.villagergpt.events.VillagerConversationStartEvent
+import tj.horner.villagergpt.events.VillagerConversationSummarizeEvent
 
 class VillagerConversationManager(private val plugin: Plugin) {
     private val conversations: MutableList<VillagerConversation> = mutableListOf()
@@ -59,7 +60,11 @@ class VillagerConversationManager(private val plugin: Plugin) {
 
     private fun endConversations(conversationsToEnd: Collection<VillagerConversation>) {
         conversationsToEnd.forEach {
+            plugin.logger.info("Summarizing conversation")
+            val summarizeEvent = VillagerConversationSummarizeEvent(it.player, it.villager)
+            plugin.server.pluginManager.callEvent(summarizeEvent)
             it.ended = true
+
             val endEvent = VillagerConversationEndEvent(it.player, it.villager)
             plugin.server.pluginManager.callEvent(endEvent)
         }

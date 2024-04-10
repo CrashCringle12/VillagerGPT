@@ -24,13 +24,13 @@ class CallGuardsAction (private val villagerconversation: VillagerConversation, 
             val golem = world.spawnEntity(Location(world, x + 1, y, z), EntityType.IRON_GOLEM) as IronGolem
             golem.target = villagerconversation.player
         }
-
+        villagerconversation.player.addPotionEffect(org.bukkit.potion.PotionEffect(org.bukkit.potion.PotionEffectType.SLOW, 1200, 10))
+        villagerconversation.player.sendMessage("You have been handcuffed!")
         // Add ReputationType.MAJOR_NEGATIVE to the villager
         // Code:
         val reputations = villagerconversation.villager.reputations.get(villagerconversation.player.uniqueId)
-        reputations?.setReputation(ReputationType.MAJOR_NEGATIVE, ((reputations.getReputation(ReputationType.MAJOR_NEGATIVE) + 1) * 1.5).toInt())
-
-
-
+        reputations?.setReputation(ReputationType.MAJOR_NEGATIVE, 100)
+        reputations?.setReputation(ReputationType.MINOR_NEGATIVE, 200)
+        reputations?.setReputation(ReputationType.MAJOR_POSITIVE, 0)
     }
 }

@@ -11,15 +11,15 @@ enum class VillagerSpeechStyle {
     },
     SOUTHERN {
         override fun promptDescription(): String =
-                "Speak as though you are from the deep south"
+                "Speak as though you are from the deep south "
     },
     FORMAL {
         override fun promptDescription(): String =
-                "Speak in a formal and proper manner"
+                "Speak in a formal and proper manner like royalty"
     },
     INFORMAL {
         override fun promptDescription(): String =
-                "Speak in an informal and casual manner"
+                "Speak in an informal and casual manner "
     },
     Straightforward {
         override fun promptDescription(): String =
@@ -27,7 +27,7 @@ enum class VillagerSpeechStyle {
     },
     SLANG {
         override fun promptDescription(): String =
-                "Speak using slang and colloquialisms"
+                "Speak using slang and colloquialisms as though you are a teenager"
     },
     PIRATE {
         override fun promptDescription(): String =
