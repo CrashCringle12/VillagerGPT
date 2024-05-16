@@ -15,6 +15,7 @@ import tj.horner.villagergpt.VillagerGPT.Companion.PROFESSION_
 import tj.horner.villagergpt.events.NPCGlobalConversationDMEvent
 import tj.horner.villagergpt.events.NPCGlobalConversationMessageEvent
 import tj.horner.villagergpt.events.NPCGlobalConversationResponseEvent
+import java.io.File
 import java.time.Duration
 import java.util.*
 
@@ -145,8 +146,8 @@ class NPCGlobalConversation(private val plugin: Plugin, val npc: NPC, val player
         val biome = world.getBiome(npc.entity.location)
         val time = if (world.isDayTime) "Day" else "Night"
         val npcPlayer = (npc.entity as Player)
-        npcPlayer.inventory.addItem( ItemStack(Material.DIAMOND,64));
-        npcPlayer.inventory.addItem( ItemStack(Material.ICE, 12) );
+        npcPlayer.inventory.addItem(ItemStack(Material.DIAMOND, 64));
+        npcPlayer.inventory.addItem(ItemStack(Material.ICE, 12));
 
         // Set a variable villagerinventory to a string of the contents villager's inventory
         var npcInventory = ""
@@ -157,17 +158,28 @@ class NPCGlobalConversation(private val plugin: Plugin, val npc: NPC, val player
         for (item in npcPlayer.inventory.contents) {
             if (item != null) {
                 plugin.logger.info(item.toString())
-                npcInventory += item.amount.toString() + " "  +item.type.name + "\n"
+                npcInventory += item.amount.toString() + " " + item.type.name + "\n"
             }
         }
         if (npcInventory.equals("")) {
             npcInventory = "Nothing"
         }
-
-        //plugin.logger.info("${npc.name} is $personality")
-        //plugin.logger.info("${npc.name} uses $speechStyle language")
-
-        return """
+        // Read from prompt.txt in the plugin's data folder
+        val file = File(plugin.dataFolder, "prompt.txt")
+        var prompt = ""
+        if (file.exists()) {
+            prompt = file.readText()
+            // Replace placeholders
+            prompt = prompt.replace("\$time", time)
+            prompt = prompt.replace("\$weather", weather)
+            prompt = prompt.replace("\$biome", biome.name)
+            prompt = prompt.replace("\$npcProfession", PROFESSION_)
+            prompt = prompt.replace("\$npcName", npc.name)
+            prompt = prompt.replace("\$npcInventory", npcInventory)
+            prompt = prompt.replace("\$altPlayer", ALTNAME)
+        } else {
+            plugin.logger.warning("prompt.txt file not found")
+            prompt = """
         Your Name: ${npc.name}
         Your Profession: $PROFESSION_
         You are a player in a bartering game that takes place within Minecraft. You will converse with another player named Bobby and make trades.
@@ -230,5 +242,7 @@ class NPCGlobalConversation(private val plugin: Plugin, val npc: NPC, val player
         - If you receive a trade, you must respond with ACTION:ACCEPT or ACTION:DECLINE
         - If you accept or decline a trade, your next message should acknowledge that (i.e. ty! or I declined your trade because ...)
         """.trimIndent()
+        }
+        return prompt
     }
 }
